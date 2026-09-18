@@ -152,3 +152,31 @@ func TestReplayMissingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestReset(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "wal.log")
+	w, err := Open(path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Append(Record{Type: RecPut, Key: []byte("k"), Value: []byte("v")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Reset(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := Replay(path, func(Record) error {
+		n++
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("replayed %d after reset", n)
+	}
+}

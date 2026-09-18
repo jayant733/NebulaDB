@@ -117,15 +117,33 @@ func (t *Table) Delete(key []byte) {
 	t.insertLocked(key, nil, true)
 }
 
-// Get returns a copy of the value. ok is false if missing or tombstoned.
-func (t *Table) Get(key []byte) (value []byte, ok bool) {
+// Result is a MemTable lookup outcome (needed so tombstones hide older SSTables).
+type Result int
+
+const (
+	Miss Result = iota
+	Found
+	Deleted
+)
+
+// Lookup distinguishes missing keys from tombstones.
+func (t *Table) Lookup(key []byte) (value []byte, st Result) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	n := t.find(key, nil)
-	if n == nil || n.deleted {
-		return nil, false
+	if n == nil {
+		return nil, Miss
 	}
-	return bytes.Clone(n.value), true
+	if n.deleted {
+		return nil, Deleted
+	}
+	return bytes.Clone(n.value), Found
+}
+
+// Get returns a copy of the value. ok is false if missing or tombstoned.
+func (t *Table) Get(key []byte) (value []byte, ok bool) {
+	v, st := t.Lookup(key)
+	return v, st == Found
 }
 
 // Len is the number of live (non-tombstone) keys.
@@ -144,13 +162,20 @@ func (t *Table) ApproxSize() int64 {
 
 // Scan walks live keys in order. Callback must copy slices if it retains them.
 func (t *Table) Scan(fn func(key, value []byte) bool) {
+	t.ScanAll(func(key, value []byte, deleted bool) bool {
+		if deleted {
+			return true
+		}
+		return fn(key, value)
+	})
+}
+
+// ScanAll visits every node, including tombstones, in key order.
+func (t *Table) ScanAll(fn func(key, value []byte, deleted bool) bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	for n := t.head.next[0]; n != nil; n = n.next[0] {
-		if n.deleted {
-			continue
-		}
-		if !fn(n.key, n.value) {
+		if !fn(n.key, n.value, n.deleted) {
 			return
 		}
 	}

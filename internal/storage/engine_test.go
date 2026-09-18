@@ -181,6 +181,76 @@ func TestWALThenMemtableOnAppendError(t *testing.T) {
 	}
 }
 
+func TestFlushThenGetAndRecover(t *testing.T) {
+	dir := t.TempDir()
+	e, err := Open(Options{Dir: dir, Sync: SyncAlways, MemtableBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Set([]byte("a"), []byte("1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Set([]byte("b"), []byte("2")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if e.Stats().SSTables != 1 {
+		t.Fatalf("sst count %d", e.Stats().SSTables)
+	}
+	if e.Stats().LiveKeys != 0 {
+		t.Fatalf("mem should be empty after flush, live=%d", e.Stats().LiveKeys)
+	}
+	v, ok, err := e.Get([]byte("a"))
+	if err != nil || !ok || string(v) != "1" {
+		t.Fatalf("get from sst: %q ok=%v err=%v", v, ok, err)
+	}
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	e2, err := Open(Options{Dir: dir, Sync: SyncAlways})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e2.Close()
+	v, ok, err = e2.Get([]byte("b"))
+	if err != nil || !ok || string(v) != "2" {
+		t.Fatalf("recover sst: %q ok=%v err=%v", v, ok, err)
+	}
+}
+
+func TestTombstoneHidesFlushedValue(t *testing.T) {
+	dir := t.TempDir()
+	e, err := Open(Options{Dir: dir, Sync: SyncAlways})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	_ = e.Set([]byte("k"), []byte("old"))
+	_ = e.Flush()
+	_ = e.Delete([]byte("k"))
+	if _, ok, err := e.Get([]byte("k")); err != nil || ok {
+		t.Fatalf("mem tombstone should hide sst, ok=%v err=%v", ok, err)
+	}
+}
+
+func TestAutoFlushOnSize(t *testing.T) {
+	dir := t.TempDir()
+	e, err := Open(Options{Dir: dir, Sync: SyncAlways, MemtableBytes: 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if err := e.Set([]byte("hello"), []byte("world")); err != nil {
+		t.Fatal(err)
+	}
+	if e.Stats().SSTables < 1 {
+		t.Fatal("expected auto flush")
+	}
+}
+
 func mustOpen(t *testing.T) *Engine {
 	t.Helper()
 	e, err := Open(Options{Dir: t.TempDir(), Sync: SyncAlways})

@@ -31,6 +31,13 @@ func TestPutGetDelete(t *testing.T) {
 	if v, ok := m.Get([]byte("a")); !ok || string(v) != "again" {
 		t.Fatalf("resurrect: %q %v", v, ok)
 	}
+	if _, st := m.Lookup([]byte("missing")); st != Miss {
+		t.Fatalf("missing lookup %v", st)
+	}
+	m.Delete([]byte("c"))
+	if _, st := m.Lookup([]byte("c")); st != Deleted {
+		t.Fatalf("tombstone lookup %v", st)
+	}
 }
 
 func TestScanOrder(t *testing.T) {

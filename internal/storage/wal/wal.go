@@ -86,6 +86,25 @@ func (w *WAL) Sync() error {
 	return w.f.Sync()
 }
 
+// Reset truncates the log after a successful MemTable flush (WAL rotate).
+func (w *WAL) Reset() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.f == nil {
+		return fmt.Errorf("wal: closed")
+	}
+	if err := w.f.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := w.f.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	if w.sync {
+		return w.f.Sync()
+	}
+	return nil
+}
+
 // Close syncs (if the file is still open) and closes the log.
 func (w *WAL) Close() error {
 	w.mu.Lock()

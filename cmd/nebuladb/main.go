@@ -67,14 +67,17 @@ func run(eng *storage.Engine, line string) error {
 		fmt.Println("get <key>          — read")
 		fmt.Println("del <key>          — tombstone")
 		fmt.Println("scan               — ordered live keys")
+		fmt.Println("flush              — MemTable → SSTable, rotate WAL")
 		fmt.Println("stats              — memtable counters")
 		fmt.Println("exit               — close WAL and quit")
 		return nil
 	case "exit", "quit":
 		return errQuit
+	case "flush":
+		return eng.Flush()
 	case "stats":
 		s := eng.Stats()
-		fmt.Printf("dir=%s live_keys=%d approx_bytes=%d\n", s.Dir, s.LiveKeys, s.ApproxSize)
+		fmt.Printf("dir=%s live_keys=%d approx_bytes=%d sstables=%d\n", s.Dir, s.LiveKeys, s.ApproxSize, s.SSTables)
 		return nil
 	case "scan":
 		n := 0
