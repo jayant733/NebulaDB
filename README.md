@@ -32,7 +32,7 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 1 — Storage Engine** is the first shippable slice: a durable key-value store with WAL, skip-list MemTable, and crash recovery.
+**Phase 2 — LSM Tree** is the current shippable slice: WAL + MemTable + SSTables, Bloom filters, flush, and compaction.
 
 | Capability | Status |
 |------------|--------|
@@ -40,7 +40,7 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 | Write-Ahead Log + `fsync` | Implemented |
 | Crash recovery via WAL replay | Implemented |
 | In-memory MemTable (skip list) | Implemented |
-| LSM / SSTables / compaction | Phase 2 |
+| LSM / SSTables / Bloom / compaction | Implemented |
 | SQL | Phase 4 |
 | Transactions | Phase 5 |
 | Raft cluster | Phase 6 |
@@ -64,6 +64,7 @@ Interactive commands:
 set user:1 jayant
 get user:1
 del user:1
+flush
 scan
 stats
 exit

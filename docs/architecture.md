@@ -1,6 +1,6 @@
 # Architecture
 
-## What exists today (Phase 1)
+## What exists today (Phase 2)
 
 ```
   REPL / tests
@@ -8,16 +8,18 @@
        ▼
   storage.Engine
        │
-       ├── WAL (append-only, CRC-framed, optional fsync)
-       └── MemTable (concurrent skip list)
+       ├── WAL (append-only; rotated after flush)
+       ├── MemTable (skip list)
+       └── SSTables (Bloom + restart index + compaction)
               │
               ▼
-         Process memory
+         Data directory
 ```
 
 - The **WAL is the source of truth** on disk.
-- The **MemTable is the serving state** in memory.
-- On `Open`, the engine replays the WAL into a fresh MemTable.
+- Recent mutations live in the **MemTable**; older data lives in **SSTables**.
+- The **WAL** records unflushed mutations. After flush, the WAL is rotated.
+- On `Open`, the engine loads MANIFEST SSTables, then replays the WAL.
 - There is no network, no SQL, and no replication.
 
 ## Target architecture (later phases)
@@ -46,17 +48,18 @@
 
 SQL, transactions, Raft, sharding, and Kubernetes layer **on top of** a correct storage engine. They do not replace it.
 
-## Process model (Phase 1)
+## Process model (Phase 2)
 
 One OS process. One data directory:
 
 ```
 <data>/
-  CURRENT          # active WAL file name
-  wal-000001.log   # append-only records
+  MANIFEST         # ordered SSTable ids
+  wal-000001.log   # unflushed mutations
+  sst/000001.sst
 ```
 
-Later: `sst/` for SSTables, `manifest` for LSM levels, `raft/` for consensus logs (the Raft log may *be* the WAL, or sit beside it — see ADRs when Phase 6 starts).
+Later: leveled compaction, `raft/` for consensus logs (the Raft log may *be* the WAL, or sit beside it — see ADRs when Phase 6 starts).
 
 ## Write path (Phase 1)
 
@@ -68,13 +71,11 @@ Later: `sst/` for SSTables, `manifest` for LSM levels, `raft/` for consensus log
 
 Apply-after-log is required so a crash after fsync never loses a committed write, and a crash before fsync never exposes a write.
 
-## Read path (Phase 1)
+## Read path (Phase 2)
 
-1. Lookup key in MemTable.
-2. Missing key → not found.
-3. Tombstone → not found.
-
-Phase 2 extends this: MemTable → Bloom → SSTables newest-to-oldest.
+1. Lookup key in MemTable (tombstone → not found, stop).
+2. Probe SSTables newest-to-oldest; Bloom miss skips a file.
+3. First hit wins (put or tombstone).
 
 ## Concurrency
 

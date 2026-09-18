@@ -9,15 +9,15 @@ Commit **one step at a time**. Do not squash these into a single “add LSM” c
 | 2.2 | SSTable writer/reader | `feat(storage): add SSTable files` |
 | 2.3 | MemTable flush + WAL rotate + Get stack | `feat(storage): flush MemTable to SSTables` |
 | 2.4 | Size-tiered compaction + tombstone GC | `feat(storage): compact SSTables` |
-| 2.5 | README / storage.md status | `docs: mark Phase 2 storage complete` |
+| 2.5 | README / storage.md status | this file |
 
 ## Definition of done
 
-- MemTable flushes to an immutable SSTable when it exceeds a size threshold
-- `Get` checks MemTable, then SSTables newest-first (Bloom skip)
-- Restart loads MANIFEST SSTables, then replays only the **post-flush** WAL
-- Compaction merges SSTables and drops tombstones when no older version can exist
-- Tests cover flush, recovery after flush, and compaction last-write-wins
+- [x] MemTable flushes to an immutable SSTable when it exceeds a size threshold
+- [x] `Get` checks MemTable, then SSTables newest-first (Bloom skip)
+- [x] Restart loads MANIFEST SSTables, then replays only the **post-flush** WAL
+- [x] Compaction merges SSTables and drops tombstones when no older version can exist
+- [x] Tests cover flush, recovery after flush, and compaction last-write-wins
 
 ## Flush protocol (crash order)
 
