@@ -20,13 +20,19 @@ type Spec struct {
 type Store struct {
 	mu    sync.Mutex
 	eng   *storage.Engine
+	table string
 	specs []Spec
 }
 
-// Wrap loads the index catalog from eng.
+// Wrap loads the index catalog for the default (unnamed) table.
 func Wrap(eng *storage.Engine) (*Store, error) {
-	s := &Store{eng: eng}
-	raw, ok, err := eng.Get(catalogKey)
+	return WrapTable(eng, "")
+}
+
+// WrapTable loads the index catalog for a named table.
+func WrapTable(eng *storage.Engine, table string) (*Store, error) {
+	s := &Store{eng: eng, table: table}
+	raw, ok, err := eng.Get(catalogKey(table))
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +78,6 @@ func (s *Store) CreateIndex(name string, field int) error {
 		s.specs = s.specs[:len(s.specs)-1]
 		return err
 	}
-	idx := []byte(name)
 	type pair struct {
 		pk     []byte
 		fields [][]byte
@@ -81,8 +86,8 @@ func (s *Store) CreateIndex(name string, field int) error {
 		rows        []pair
 		backfillErr error
 	)
-	s.eng.ScanPrefix([]byte{tagPrimary}, func(k, v []byte) bool {
-		pk, ok := parsePrimary(k)
+	s.eng.ScanPrefix(PrimaryPrefix(s.table), func(k, v []byte) bool {
+		pk, ok := parsePrimary(s.table, k)
 		if !ok {
 			return true
 		}
@@ -98,7 +103,7 @@ func (s *Store) CreateIndex(name string, field int) error {
 		return backfillErr
 	}
 	for _, r := range rows {
-		if err := s.addSecondaryLocked(idx, field, r.pk, r.fields); err != nil {
+		if err := s.addSecondaryLocked(name, field, r.pk, r.fields); err != nil {
 			return err
 		}
 	}
@@ -120,7 +125,7 @@ func (s *Store) DropIndex(name string) error {
 		return fmt.Errorf("index: %q not found", name)
 	}
 	var keys [][]byte
-	s.eng.ScanPrefix(SecondaryPrefixAll([]byte(name)), func(k, v []byte) bool {
+	s.eng.ScanPrefix(SecondaryPrefixAll(s.table, name), func(k, v []byte) bool {
 		keys = append(keys, append([]byte(nil), k...))
 		return true
 	})
@@ -140,7 +145,7 @@ func (s *Store) PutRow(pk []byte, fields [][]byte) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	old, ok, err := s.eng.Get(PrimaryKey(pk))
+	old, ok, err := s.eng.Get(PrimaryKey(s.table, pk))
 	if err != nil {
 		return err
 	}
@@ -153,7 +158,7 @@ func (s *Store) PutRow(pk []byte, fields [][]byte) error {
 			return err
 		}
 	}
-	if err := s.eng.Set(PrimaryKey(pk), row.Encode(fields)); err != nil {
+	if err := s.eng.Set(PrimaryKey(s.table, pk), row.Encode(fields)); err != nil {
 		return err
 	}
 	return s.addAllSecondaryLocked(pk, fields)
@@ -161,7 +166,7 @@ func (s *Store) PutRow(pk []byte, fields [][]byte) error {
 
 // GetRow decodes the primary tuple.
 func (s *Store) GetRow(pk []byte) ([][]byte, bool, error) {
-	v, ok, err := s.eng.Get(PrimaryKey(pk))
+	v, ok, err := s.eng.Get(PrimaryKey(s.table, pk))
 	if err != nil || !ok {
 		return nil, ok, err
 	}
@@ -176,7 +181,7 @@ func (s *Store) GetRow(pk []byte) ([][]byte, bool, error) {
 func (s *Store) DeleteRow(pk []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	old, ok, err := s.eng.Get(PrimaryKey(pk))
+	old, ok, err := s.eng.Get(PrimaryKey(s.table, pk))
 	if err != nil {
 		return err
 	}
@@ -190,7 +195,7 @@ func (s *Store) DeleteRow(pk []byte) error {
 	if err := s.removeAllSecondaryLocked(pk, fields); err != nil {
 		return err
 	}
-	return s.eng.Delete(PrimaryKey(pk))
+	return s.eng.Delete(PrimaryKey(s.table, pk))
 }
 
 // Find returns primary keys with indexed field equal to sk (SK order, then pk).
@@ -199,9 +204,8 @@ func (s *Store) Find(name string, sk []byte) ([][]byte, error) {
 		return nil, err
 	}
 	var pks [][]byte
-	idx := []byte(name)
-	s.eng.ScanPrefix(SecondaryPrefixSK(idx, sk), func(k, v []byte) bool {
-		_, pk, ok := parseSecondary(k, idx)
+	s.eng.ScanPrefix(SecondaryPrefixSK(s.table, name, sk), func(k, v []byte) bool {
+		_, pk, ok := parseSecondary(s.table, name, k)
 		if ok {
 			pks = append(pks, append([]byte(nil), pk...))
 		}
@@ -215,10 +219,10 @@ func (s *Store) RangeFind(name string, lo, hi []byte) ([][]byte, error) {
 	if _, err := s.spec(name); err != nil {
 		return nil, err
 	}
-	idx := []byte(name)
+	idx := name
 	var pks [][]byte
-	s.eng.ScanPrefix(SecondaryPrefixAll(idx), func(k, v []byte) bool {
-		sk, pk, ok := parseSecondary(k, idx)
+	s.eng.ScanPrefix(SecondaryPrefixAll(s.table, idx), func(k, v []byte) bool {
+		sk, pk, ok := parseSecondary(s.table, idx, k)
 		if !ok {
 			return true
 		}
@@ -234,6 +238,36 @@ func (s *Store) RangeFind(name string, lo, hi []byte) ([][]byte, error) {
 	return pks, nil
 }
 
+// ScanRows visits all primary rows in pk order.
+func (s *Store) ScanRows(fn func(pk []byte, fields [][]byte) bool) error {
+	var err error
+	s.eng.ScanPrefix(PrimaryPrefix(s.table), func(k, v []byte) bool {
+		pk, ok := parsePrimary(s.table, k)
+		if !ok {
+			return true
+		}
+		fields, decErr := row.Decode(v)
+		if decErr != nil {
+			err = decErr
+			return false
+		}
+		return fn(pk, fields)
+	})
+	return err
+}
+
+// IndexOnField returns an index covering the given field, if any.
+func (s *Store) IndexOnField(field int) (Spec, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sp := range s.specs {
+		if sp.Field == field {
+			return sp, true
+		}
+	}
+	return Spec{}, false
+}
+
 func (s *Store) spec(name string) (Spec, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -246,12 +280,12 @@ func (s *Store) spec(name string) (Spec, error) {
 }
 
 func (s *Store) persistCatalog() error {
-	return s.eng.Set(catalogKey, encodeCatalog(s.specs))
+	return s.eng.Set(catalogKey(s.table), encodeCatalog(s.specs))
 }
 
 func (s *Store) addAllSecondaryLocked(pk []byte, fields [][]byte) error {
 	for _, sp := range s.specs {
-		if err := s.addSecondaryLocked([]byte(sp.Name), sp.Field, pk, fields); err != nil {
+		if err := s.addSecondaryLocked(sp.Name, sp.Field, pk, fields); err != nil {
 			return err
 		}
 	}
@@ -264,19 +298,19 @@ func (s *Store) removeAllSecondaryLocked(pk []byte, fields [][]byte) error {
 		if !ok {
 			continue
 		}
-		if err := s.eng.Delete(SecondaryKey([]byte(sp.Name), sk, pk)); err != nil {
+		if err := s.eng.Delete(SecondaryKey(s.table, sp.Name, sk, pk)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) addSecondaryLocked(idx []byte, field int, pk []byte, fields [][]byte) error {
+func (s *Store) addSecondaryLocked(idx string, field int, pk []byte, fields [][]byte) error {
 	sk, ok := row.Field(fields, field)
 	if !ok {
 		return nil
 	}
-	return s.eng.Set(SecondaryKey(idx, sk, pk), nil)
+	return s.eng.Set(SecondaryKey(s.table, idx, sk, pk), nil)
 }
 
 func bytesContainsNUL(s string) bool {

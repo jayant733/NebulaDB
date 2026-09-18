@@ -9,21 +9,32 @@ const (
 	sep        = 0x00
 )
 
-var catalogKey = []byte("x\x00catalog")
+func catalogKey(table string) []byte {
+	k := []byte("x\x00catalog\x00")
+	return append(k, table...)
+}
 
-// PrimaryKey is the LSM key for a row.
-func PrimaryKey(pk []byte) []byte {
-	out := make([]byte, 1+len(pk))
-	out[0] = tagPrimary
-	copy(out[1:], pk)
+// PrimaryPrefix is all primary rows for a table.
+func PrimaryPrefix(table string) []byte {
+	out := make([]byte, 0, 2+len(table))
+	out = append(out, tagPrimary)
+	out = append(out, table...)
+	out = append(out, sep)
 	return out
 }
 
-func parsePrimary(key []byte) (pk []byte, ok bool) {
-	if len(key) < 2 || key[0] != tagPrimary {
+// PrimaryKey is the LSM key for a row in table.
+func PrimaryKey(table string, pk []byte) []byte {
+	out := PrimaryPrefix(table)
+	return append(out, pk...)
+}
+
+func parsePrimary(table string, key []byte) (pk []byte, ok bool) {
+	pref := PrimaryPrefix(table)
+	if !bytes.HasPrefix(key, pref) || len(key) <= len(pref) {
 		return nil, false
 	}
-	return key[1:], true
+	return key[len(pref):], true
 }
 
 // encodeComparable is order-preserving: 0x00 is escaped so 0x00 0x01 is terminator.
@@ -63,45 +74,43 @@ func decodeComparable(b []byte) ([]byte, []byte, error) {
 	return nil, nil, errKey("unterminated comparable")
 }
 
-// SecondaryKey maps (index, sk, pk) → LSM key.
-func SecondaryKey(idx, sk, pk []byte) []byte {
-	enc := encodeComparable(sk)
-	out := make([]byte, 0, 2+len(idx)+len(enc)+len(pk))
+func indexPrefix(table, idx string) []byte {
+	out := make([]byte, 0, 3+len(table)+len(idx))
 	out = append(out, tagIndex)
+	out = append(out, table...)
+	out = append(out, sep)
 	out = append(out, idx...)
 	out = append(out, sep)
+	return out
+}
+
+// SecondaryKey maps (table, index, sk, pk) → LSM key.
+func SecondaryKey(table, idx string, sk, pk []byte) []byte {
+	enc := encodeComparable(sk)
+	out := indexPrefix(table, idx)
 	out = append(out, enc...)
 	out = append(out, pk...)
 	return out
 }
 
-// SecondaryPrefixAll is every key in one index.
-func SecondaryPrefixAll(idx []byte) []byte {
-	out := make([]byte, 0, 2+len(idx))
-	out = append(out, tagIndex)
-	out = append(out, idx...)
-	out = append(out, sep)
-	return out
+// SecondaryPrefixAll is every key in one index of a table.
+func SecondaryPrefixAll(table, idx string) []byte {
+	return indexPrefix(table, idx)
 }
 
 // SecondaryPrefixSK is every pk for one secondary value.
-func SecondaryPrefixSK(idx, sk []byte) []byte {
+func SecondaryPrefixSK(table, idx string, sk []byte) []byte {
 	enc := encodeComparable(sk)
-	out := make([]byte, 0, 2+len(idx)+len(enc))
-	out = append(out, tagIndex)
-	out = append(out, idx...)
-	out = append(out, sep)
-	out = append(out, enc...)
-	return out
+	out := indexPrefix(table, idx)
+	return append(out, enc...)
 }
 
-func parseSecondary(key, idx []byte) (sk, pk []byte, ok bool) {
-	pref := SecondaryPrefixAll(idx)
+func parseSecondary(table, idx string, key []byte) (sk, pk []byte, ok bool) {
+	pref := indexPrefix(table, idx)
 	if !bytes.HasPrefix(key, pref) {
 		return nil, nil, false
 	}
-	rest := key[len(pref):]
-	sk, rest, err := decodeComparable(rest)
+	sk, rest, err := decodeComparable(key[len(pref):])
 	if err != nil {
 		return nil, nil, false
 	}
