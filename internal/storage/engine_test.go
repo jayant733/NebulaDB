@@ -181,6 +181,32 @@ func TestWALThenMemtableOnAppendError(t *testing.T) {
 	}
 }
 
+func TestFlushRotatesWAL(t *testing.T) {
+	dir := t.TempDir()
+	e, err := Open(Options{Dir: dir, Sync: SyncAlways})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if err := e.Set([]byte("k"), []byte("payload-that-must-leave-the-log")); err != nil {
+		t.Fatal(err)
+	}
+	before := e.Stats().WALBytes
+	if before == 0 {
+		t.Fatal("WAL should grow before flush")
+	}
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if e.Stats().WALBytes != 0 {
+		t.Fatalf("WAL should be empty after flush, size=%d", e.Stats().WALBytes)
+	}
+	v, ok, err := e.Get([]byte("k"))
+	if err != nil || !ok || string(v) != "payload-that-must-leave-the-log" {
+		t.Fatalf("value must survive in SST: %q ok=%v err=%v", v, ok, err)
+	}
+}
+
 func TestFlushThenGetAndRecover(t *testing.T) {
 	dir := t.TempDir()
 	e, err := Open(Options{Dir: dir, Sync: SyncAlways, MemtableBytes: 1 << 20})

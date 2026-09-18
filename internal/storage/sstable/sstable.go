@@ -136,6 +136,8 @@ type Reader struct {
 	idxKey   [][]byte
 	dataEnd  int64
 	indexOff uint64
+	bloomN   uint64 // Get probes that consulted the filter
+	bloomNeg uint64 // Get probes skipped by a negative Bloom
 }
 
 // Open reads footer, index, and Bloom filter.
@@ -242,8 +244,12 @@ func (r *Reader) Path() string { return r.path }
 
 // Get looks up key. ok=false means absent in this file (or Bloom miss).
 func (r *Reader) Get(key []byte) (value []byte, tombstone bool, ok bool, err error) {
-	if r.filter != nil && !r.filter.MayContain(key) {
-		return nil, false, false, nil
+	if r.filter != nil {
+		r.bloomN++
+		if !r.filter.MayContain(key) {
+			r.bloomNeg++
+			return nil, false, false, nil
+		}
 	}
 	start := r.restartFor(key)
 	off := int64(start)
@@ -333,3 +339,8 @@ func (it *Iter) Next() bool {
 
 func (it *Iter) Entry() Entry { return it.cur }
 func (it *Iter) Err() error   { return it.err }
+
+// BloomStats returns how many Get probes consulted the filter and how many were skipped.
+func (r *Reader) BloomStats() (checked, negative uint64) {
+	return r.bloomN, r.bloomNeg
+}

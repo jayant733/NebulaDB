@@ -105,6 +105,20 @@ func (w *WAL) Reset() error {
 	return nil
 }
 
+// Size is the current log length in bytes.
+func (w *WAL) Size() (int64, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.f == nil {
+		return 0, fmt.Errorf("wal: closed")
+	}
+	st, err := w.f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return st.Size(), nil
+}
+
 // Close syncs (if the file is still open) and closes the log.
 func (w *WAL) Close() error {
 	w.mu.Lock()

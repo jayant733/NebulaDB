@@ -260,21 +260,37 @@ func (e *Engine) Get(key []byte) ([]byte, bool, error) {
 
 // Stats is a snapshot of engine state for the REPL.
 type Stats struct {
-	LiveKeys   int
-	ApproxSize int64
-	Dir        string
-	SSTables   int
+	LiveKeys       int
+	ApproxSize     int64
+	Dir            string
+	SSTables       int
+	WALBytes       int64
+	BloomChecked   uint64
+	BloomNegatives uint64
 }
 
-// Stats returns MemTable counters and SST count.
+// Stats returns MemTable, WAL, SST, and Bloom counters.
 func (e *Engine) Stats() Stats {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	var walBytes int64
+	if e.wal != nil {
+		walBytes, _ = e.wal.Size()
+	}
+	var checked, neg uint64
+	for _, s := range e.ssts {
+		c, n := s.BloomStats()
+		checked += c
+		neg += n
+	}
 	return Stats{
-		LiveKeys:   e.mem.Len(),
-		ApproxSize: e.mem.ApproxSize(),
-		Dir:        e.opts.Dir,
-		SSTables:   len(e.ssts),
+		LiveKeys:       e.mem.Len(),
+		ApproxSize:     e.mem.ApproxSize(),
+		Dir:            e.opts.Dir,
+		SSTables:       len(e.ssts),
+		WALBytes:       walBytes,
+		BloomChecked:   checked,
+		BloomNegatives: neg,
 	}
 }
 

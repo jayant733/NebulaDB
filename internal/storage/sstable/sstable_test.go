@@ -76,3 +76,23 @@ func TestFooterCorrupt(t *testing.T) {
 		t.Fatal("expected crc error")
 	}
 }
+
+func TestBloomSkipsAbsentKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.sst")
+	if err := Write(path, []Entry{{Key: []byte("present"), Value: []byte("1")}}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	_, _, ok, err := r.Get([]byte("absent-key-not-in-table"))
+	if err != nil || ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	checked, neg := r.BloomStats()
+	if checked != 1 || neg != 1 {
+		t.Fatalf("bloom stats checked=%d neg=%d", checked, neg)
+	}
+}
