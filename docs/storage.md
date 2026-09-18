@@ -65,10 +65,53 @@ A `map[string][]byte` would be simpler but would not teach ordered flush to SSTa
 3. **Idempotent replay:** replaying the same WAL twice yields the same MemTable state (last write wins per key).
 4. **Copy-out on Get:** returned slices are copies so callers cannot mutate internal nodes.
 
-## Future (Phase 2)
+## LSM (Phase 2)
 
-- Size-based MemTable flush
-- SSTable: data block + index block + footer
-- Bloom filter per SST
-- Leveled or size-tiered compaction
-- WAL reset / checkpoint after flush
+### Read path
+
+```
+Get(key) → MemTable → SSTables (newest → oldest)
+         Bloom negative → skip file
+         tombstone      → not found
+```
+
+### SSTable layout (little-endian)
+
+```
+data:  repeating
+  type   uint8     // 1 = put, 2 = tombstone
+  klen   uint32
+  vlen   uint32
+  key, value
+
+index: (offsets of restart keys, every ~4KiB of data)
+  count  uint32
+  repeating: offset uint64, klen uint32, key
+
+bloom:
+  k      uint8     // hash functions
+  nbits  uint32    // bit array length
+  bits   [(nbits+7)/8]byte
+
+footer (24 bytes at EOF):
+  index_off  uint64
+  bloom_off  uint64
+  magic      uint32   // 0x4C535431  "LST1"
+  crc32      uint32   // IEEE of the 20 bytes above
+```
+
+### MANIFEST
+
+Text file `MANIFEST` in the data dir:
+
+```
+NEBULAMF1
+sst 000001
+sst 000002
+```
+
+Later lines are **newer**. Reads search from the bottom.
+
+### Compaction
+
+Size-tiered L0: when live SST count ≥ `CompactN` (default 4), merge all SSTables newest-wins into one file. With a single level, tombstones can be dropped in the output.

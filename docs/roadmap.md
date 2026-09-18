@@ -11,7 +11,7 @@ Work is committed **per step**, not as one giant dump. Typical commit sequence i
 
 ---
 
-## Phase 1 — Storage Engine (current)
+## Phase 1 — Storage Engine (done)
 
 **Goal:** Durable single-node KV: `Set`, `Get`, `Delete`.
 
@@ -39,9 +39,11 @@ Work is committed **per step**, not as one giant dump. Typical commit sequence i
 
 ---
 
-## Phase 2 — LSM Tree
+## Phase 2 — LSM Tree (in progress)
 
 MemTable flush → immutable SSTables on disk → Bloom filters → compaction → tombstone GC.
+
+See [docs/phases/phase-02-lsm.md](phases/phase-02-lsm.md).
 
 **Done when:** data larger than RAM survives restart without replaying an unbounded WAL; compaction keeps read amplification bounded; Bloom filters avoid most unnecessary SST reads.
 
