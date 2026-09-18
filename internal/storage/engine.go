@@ -2,6 +2,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -323,4 +324,20 @@ func (e *Engine) Scan(fn func(key, value []byte) bool) {
 			return
 		}
 	}
+}
+
+// ScanPrefix visits live keys with the given prefix, in order.
+func (e *Engine) ScanPrefix(prefix []byte, fn func(key, value []byte) bool) {
+	e.Scan(func(k, v []byte) bool {
+		if len(prefix) == 0 {
+			return fn(k, v)
+		}
+		if bytes.HasPrefix(k, prefix) {
+			return fn(k, v)
+		}
+		if bytes.Compare(k, prefix) > 0 {
+			return false
+		}
+		return true
+	})
 }

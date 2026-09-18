@@ -307,6 +307,22 @@ func TestCompactionLastWriteWinsAndDropsTombstones(t *testing.T) {
 	}
 }
 
+func TestScanPrefix(t *testing.T) {
+	e := mustOpen(t)
+	defer e.Close()
+	_ = e.Set([]byte("i/age/20/1"), []byte("x"))
+	_ = e.Set([]byte("i/age/21/2"), []byte("x"))
+	_ = e.Set([]byte("p/1"), []byte("row"))
+	var keys []string
+	e.ScanPrefix([]byte("i/age/"), func(k, v []byte) bool {
+		keys = append(keys, string(k))
+		return true
+	})
+	if len(keys) != 2 {
+		t.Fatalf("keys=%v", keys)
+	}
+}
+
 func mustOpen(t *testing.T) *Engine {
 	t.Helper()
 	e, err := Open(Options{Dir: t.TempDir(), Sync: SyncAlways})
