@@ -41,3 +41,9 @@ REPL is fine for Phase 1. Cluster internals will use gRPC (Phase 10). HTTP may e
 **Status:** Accepted
 
 The marketing bullets in the original brief are a **target**, not the README. Update README status after each phase's definition of done.
+
+## ADR-008: LSM secondary indexes as the durable default
+
+**Status:** Accepted (Phase 3)
+
+Secondary keys are ordinary LSM records, so they share WAL, flush, and crash recovery with primary rows. A separate B+ tree is implemented for split/range algorithms; it is in-memory in this phase. SQL `CREATE INDEX` will attach to the LSM catalog first.
