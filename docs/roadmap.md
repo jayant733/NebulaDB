@@ -51,9 +51,11 @@ Secondary indexes (LSM-backed) plus an in-memory B+ tree. See [docs/phases/phase
 
 SQL `CREATE INDEX` is Phase 4.
 
-## Phase 4 — SQL Engine
+## Phase 4 — SQL Engine (in progress)
 
 Lexer → parser → AST → planner → executor over the KV/LSM engine.
+
+See [docs/phases/phase-04-sql.md](phases/phase-04-sql.md).
 
 Subset: `CREATE TABLE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`, `WHERE`, `ORDER BY`, `LIMIT`. Aggregates and `JOIN` after the subset is correct.
 
