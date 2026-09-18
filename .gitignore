@@ -1,0 +1,29 @@
+# Binaries
+/bin/
+/nebuladb
+/nebuladb.exe
+/nebulactl
+/nebulactl.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Data / WAL (local runs)
+/data/
+*.log
+
+# Go
+vendor/
+coverage.out
+coverage.html
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
