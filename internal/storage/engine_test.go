@@ -251,6 +251,36 @@ func TestAutoFlushOnSize(t *testing.T) {
 	}
 }
 
+func TestCompactionLastWriteWinsAndDropsTombstones(t *testing.T) {
+	dir := t.TempDir()
+	e, err := Open(Options{Dir: dir, Sync: SyncAlways, CompactN: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+
+	_ = e.Set([]byte("keep"), []byte("v1"))
+	_ = e.Set([]byte("gone"), []byte("x"))
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	_ = e.Set([]byte("keep"), []byte("v2"))
+	_ = e.Delete([]byte("gone"))
+	if err := e.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if e.Stats().SSTables != 1 {
+		t.Fatalf("expected compact to 1 sst, got %d", e.Stats().SSTables)
+	}
+	v, ok, err := e.Get([]byte("keep"))
+	if err != nil || !ok || string(v) != "v2" {
+		t.Fatalf("keep: %q ok=%v err=%v", v, ok, err)
+	}
+	if _, ok, err := e.Get([]byte("gone")); err != nil || ok {
+		t.Fatalf("tombstone should be dropped after full compact, ok=%v", ok)
+	}
+}
+
 func mustOpen(t *testing.T) *Engine {
 	t.Helper()
 	e, err := Open(Options{Dir: t.TempDir(), Sync: SyncAlways})

@@ -30,6 +30,7 @@ type Options struct {
 	Dir            string
 	Sync           SyncMode
 	MemtableBytes  int64 // flush when MemTable reaches this size; 0 → 1 MiB
+	CompactN       int   // compact all SSTables when count ≥ N; 0 → 4
 }
 
 func (o Options) memLimit() int64 {
@@ -217,7 +218,7 @@ func (e *Engine) flushLocked() error {
 	e.ssts = append(e.ssts, r)
 	e.nextID = id + 1
 	e.mem = memtable.New()
-	return nil
+	return e.maybeCompactLocked()
 }
 
 func parseSSTID(path string) uint64 {
