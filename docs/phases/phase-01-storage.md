@@ -1,36 +1,32 @@
-# Phase 1 execution checklist
+# Phase 1 — Storage Engine
 
-Use this file while implementing. Check items only when tests prove them.
+Durable single-node key-value store: WAL + skip-list MemTable + crash recovery.
 
-## Step 1.0 — Plan (docs)
+## Steps
 
-- [ ] README, roadmap, architecture, storage, consistency, ADRs
+| Step | Deliverable | Commit |
+|------|-------------|--------|
+| 1.0 | Architecture, roadmap, ADRs | `docs: add NebulaDB architecture...` |
+| 1.1 | Go module, Makefile, CLI stubs | `chore: scaffold Go module...` |
+| 1.2 | WAL: framed records, CRC32, fsync, replay | `feat(storage): add CRC-framed WAL...` |
+| 1.3 | Skip-list MemTable + tombstones | `feat(storage): add skip-list MemTable...` |
+| 1.4 | Engine: WAL-then-MemTable, Open/Close | `feat(storage): wire Engine...` |
+| 1.5 | REPL + recovery tests | this step |
 
-## Step 1.1 — Scaffold
+## Definition of done
 
-- [ ] `go.mod`, Makefile, `cmd/nebuladb` stub
+- [x] `Set`/`Get`/`Delete` on byte keys/values
+- [x] Every mutation appended to WAL before becoming visible
+- [x] Configurable `fsync` (`SyncAlways` / `SyncNone`)
+- [x] Process restart reconstructs state from WAL
+- [x] Truncated last record on crash does not corrupt the log
+- [x] Concurrent writers covered by tests (`go test ./...`; use `-race` when CGO/gcc is available)
 
-## Step 1.2 — WAL
+**Out of scope:** SSTables, SQL, network, Raft.
 
-- [ ] Encode/decode records
-- [ ] Append + optional Sync
-- [ ] Replay
-- [ ] Torn-write truncate
-- [ ] CRC failure
+## Demo
 
-## Step 1.3 — MemTable
-
-- [ ] Put / Get / Delete (tombstone)
-- [ ] Ordered scan
-- [ ] Concurrent access
-
-## Step 1.4 — Engine
-
-- [ ] Open recovers WAL
-- [ ] Set/Delete log then apply
-- [ ] Close flushes/syncs
-
-## Step 1.5 — REPL + recovery demo
-
-- [ ] Interactive CLI
-- [ ] Restart sees data
+```bash
+go test ./...
+go run ./cmd/nebuladb --data ./data
+```
