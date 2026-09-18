@@ -32,7 +32,7 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 2 — LSM Tree** is the current shippable slice: WAL + MemTable + SSTables, Bloom filters, flush, and compaction.
+**Phase 3 — Indexing** is current: LSM secondary indexes + an in-memory B+ tree. SQL `CREATE INDEX` is Phase 4.
 
 | Capability | Status |
 |------------|--------|
@@ -41,6 +41,7 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 | Crash recovery via WAL replay | Implemented |
 | In-memory MemTable (skip list) | Implemented |
 | LSM / SSTables / Bloom / compaction | Implemented |
+| Secondary indexes + B+ tree | Implemented |
 | SQL | Phase 4 |
 | Transactions | Phase 5 |
 | Raft cluster | Phase 6 |
@@ -61,11 +62,11 @@ go run ./cmd/nebuladb --data ./data
 Interactive commands:
 
 ```
-set user:1 jayant
-get user:1
-del user:1
+row 1 20 jayant
+idxcreate age 0
+idxfind age 20
+idxrange age 18 30
 flush
-scan
 stats
 exit
 ```

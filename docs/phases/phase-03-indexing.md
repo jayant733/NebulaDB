@@ -11,16 +11,16 @@ Commit **one step at a time**.
 | 3.2 | In-memory B+ tree (insert, split, search, range) | `feat(index): add B+ tree` |
 | 3.3 | Prefix scan on the LSM engine | `feat(storage): prefix scan for secondary keys` |
 | 3.4 | LSM secondary indexes + catalog + backfill | `feat(index): LSM secondary indexes` |
-| 3.5 | REPL: `row` / `idxcreate` / `idxfind` | `feat(cmd): indexed row commands` |
+| 3.5 | REPL: `row` / `idxcreate` / `idxfind` | this file |
 
 ## Definition of done
 
-- Rows are tuples: primary key + ordered fields
-- `CreateIndex(name, field)` persists a catalog entry and **backfills** existing rows
-- `Put`/`Delete` maintain secondary keys (old SK removed on update)
-- `Find` / `Range` return primary keys in SK order
-- Indexes survive restart (they live in the same WAL/LSM as primary data)
-- B+ tree splits are unit-tested (the structure SQL indexes will use later for in-memory / dedicated files)
+- [x] Rows are tuples: primary key + ordered fields
+- [x] `CreateIndex(name, field)` persists a catalog entry and **backfills** existing rows
+- [x] `Put`/`Delete` maintain secondary keys (old SK removed on update)
+- [x] `Find` / `Range` return primary keys in SK order
+- [x] Indexes survive restart (they live in the same WAL/LSM as primary data)
+- [x] B+ tree splits are unit-tested
 
 ## Key layout (LSM)
 

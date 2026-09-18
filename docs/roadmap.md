@@ -45,11 +45,11 @@ MemTable flush → immutable SSTables on disk → Bloom filters → compaction �
 
 See [docs/phases/phase-02-lsm.md](phases/phase-02-lsm.md).
 
-## Phase 3 — Indexing (in progress)
+## Phase 3 — Indexing (done)
 
-Secondary indexes (LSM-backed first, plus a B+ tree). `CREATE INDEX` SQL syntax comes in Phase 4; the on-disk/key format lands here.
+Secondary indexes (LSM-backed) plus an in-memory B+ tree. See [docs/phases/phase-03-indexing.md](phases/phase-03-indexing.md).
 
-See [docs/phases/phase-03-indexing.md](phases/phase-03-indexing.md).
+SQL `CREATE INDEX` is Phase 4.
 
 ## Phase 4 — SQL Engine
 
