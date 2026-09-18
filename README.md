@@ -32,17 +32,14 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 3 — Indexing** is current: LSM secondary indexes + an in-memory B+ tree. SQL `CREATE INDEX` is Phase 4.
+**Phase 4 — SQL Engine** is current: focused SQL over the LSM store. Transactions and Raft are later.
 
 | Capability | Status |
 |------------|--------|
 | KV `Set` / `Get` / `Delete` | Implemented |
-| Write-Ahead Log + `fsync` | Implemented |
-| Crash recovery via WAL replay | Implemented |
-| In-memory MemTable (skip list) | Implemented |
-| LSM / SSTables / Bloom / compaction | Implemented |
+| WAL, MemTable, SSTables, Bloom, compaction | Implemented |
 | Secondary indexes + B+ tree | Implemented |
-| SQL | Phase 4 |
+| SQL (CREATE/INSERT/SELECT/UPDATE/DELETE) | Implemented |
 | Transactions | Phase 5 |
 | Raft cluster | Phase 6 |
 
@@ -62,13 +59,12 @@ go run ./cmd/nebuladb --data ./data
 Interactive commands:
 
 ```
-row 1 20 jayant
-idxcreate age 0
-idxfind age 20
-idxrange age 18 30
-flush
-stats
-exit
+CREATE TABLE users (id INT, name TEXT, age INT);
+INSERT INTO users VALUES (1, 'Jayant', 20);
+SELECT * FROM users WHERE age >= 18 ORDER BY name;
+CREATE INDEX idx_users_age ON users (age);
+UPDATE users SET age = 21 WHERE id = 1;
+DELETE FROM users WHERE id = 1;
 ```
 
 Restart with the same `--data` directory after a crash. Mutations are durable once the WAL append has been synced.

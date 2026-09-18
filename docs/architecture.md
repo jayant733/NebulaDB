@@ -1,19 +1,15 @@
 # Architecture
 
-## What exists today (Phase 2)
+## What exists today (Phase 4)
 
 ```
-  REPL / tests
-       │
-       ▼
-  storage.Engine
-       │
-       ├── WAL (append-only; rotated after flush)
-       ├── MemTable (skip list)
-       └── SSTables (Bloom + restart index + compaction)
-              │
-              ▼
-         Data directory
+  REPL
+    ├── SQL engine (lexer → parser → planner → executor)
+    └── raw KV commands
+            │
+     index.Store (per table)
+            │
+     storage.Engine (WAL + MemTable + SSTables)
 ```
 
 - The **WAL is the source of truth** on disk.

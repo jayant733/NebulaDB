@@ -9,7 +9,15 @@ A **focused subset**, not the SQL standard. Aggregates and `JOIN` are out of sco
 | 4.2 | Lexer | `feat(sql): lexer` |
 | 4.3 | Parser + AST | `feat(sql): parser` |
 | 4.4 | Catalog + planner + executor | `feat(sql): execute SQL over LSM` |
-| 4.5 | REPL (statements ending in `;`) | `feat(cmd): SQL REPL` |
+| 4.5 | REPL (statements ending in `;`) | this file |
+
+## Definition of done
+
+- [x] Lexer + parser for the listed subset
+- [x] `CREATE TABLE` / `CREATE INDEX` catalog
+- [x] `INSERT` / `SELECT` / `UPDATE` / `DELETE` with `WHERE`, `ORDER BY`, `LIMIT`
+- [x] PK and secondary-index lookup in the planner
+- [x] REPL executes SQL
 
 ## Grammar
 
