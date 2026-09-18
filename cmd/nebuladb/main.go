@@ -30,8 +30,8 @@ func main() {
 	}
 	defer eng.Close()
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 1 — durable KV  data=%s  sync=%v\n", *data, !*nosync)
-	fmt.Fprintln(os.Stderr, "commands: set <key> <value> | get <key> | del <key> | scan | stats | help | exit")
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 2 — LSM KV  data=%s  sync=%v\n", *data, !*nosync)
+	fmt.Fprintln(os.Stderr, "commands: set | get | del | scan | flush | compact | stats | help | exit")
 
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
@@ -68,16 +68,20 @@ func run(eng *storage.Engine, line string) error {
 		fmt.Println("del <key>          — tombstone")
 		fmt.Println("scan               — ordered live keys")
 		fmt.Println("flush              — MemTable → SSTable, rotate WAL")
-		fmt.Println("stats              — memtable counters")
+		fmt.Println("compact            — merge SSTables, drop tombstones")
+		fmt.Println("stats              — memtable / WAL / SST / Bloom counters")
 		fmt.Println("exit               — close WAL and quit")
 		return nil
 	case "exit", "quit":
 		return errQuit
 	case "flush":
 		return eng.Flush()
+	case "compact":
+		return eng.Compact()
 	case "stats":
 		s := eng.Stats()
-		fmt.Printf("dir=%s live_keys=%d approx_bytes=%d sstables=%d\n", s.Dir, s.LiveKeys, s.ApproxSize, s.SSTables)
+		fmt.Printf("dir=%s live_keys=%d approx_bytes=%d sstables=%d wal_bytes=%d bloom_checked=%d bloom_negative=%d\n",
+			s.Dir, s.LiveKeys, s.ApproxSize, s.SSTables, s.WALBytes, s.BloomChecked, s.BloomNegatives)
 		return nil
 	case "scan":
 		n := 0
