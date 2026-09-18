@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jayant/nebuladb/internal/index"
+	"github.com/jayant/nebuladb/internal/sql/engine"
 	"github.com/jayant/nebuladb/internal/storage"
 )
 
@@ -19,6 +20,7 @@ var errQuit = errors.New("quit")
 type repl struct {
 	eng *storage.Engine
 	idx *index.Store
+	sql *engine.Engine
 }
 
 func main() {
@@ -40,10 +42,15 @@ func main() {
 	if err != nil {
 		fatalf("index catalog: %v", err)
 	}
-	r := &repl{eng: eng, idx: idx}
+	sqleng, err := engine.New(eng)
+	if err != nil {
+		fatalf("sql: %v", err)
+	}
+	r := &repl{eng: eng, idx: idx, sql: sqleng}
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 3 — LSM + indexes  data=%s  sync=%v\n", *data, !*nosync)
-	fmt.Fprintln(os.Stderr, "commands: set/get/del | row/getrow | idxcreate/idxfind | flush | help | exit")
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 4 — SQL  data=%s  sync=%v\n", *data, !*nosync)
+	fmt.Fprintln(os.Stderr, "SQL: CREATE TABLE / INSERT / SELECT / UPDATE / DELETE  (semicolon optional)")
+	fmt.Fprintln(os.Stderr, "KV:  set | get | del | flush | help | exit")
 
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
@@ -76,18 +83,14 @@ func run(r *repl, line string) error {
 
 	switch cmd {
 	case "help", "?":
-		fmt.Println("set <key> <value>           — raw KV put")
-		fmt.Println("get <key>                   — raw KV read")
-		fmt.Println("del <key>                   — raw KV tombstone")
-		fmt.Println("row <pk> <f0> [f1 ...]      — put indexed tuple")
-		fmt.Println("getrow <pk>                 — get tuple")
-		fmt.Println("delrow <pk>                 — delete tuple + index entries")
-		fmt.Println("idxcreate <name> <field>    — secondary index (0-based field)")
-		fmt.Println("idxdrop <name>")
-		fmt.Println("idxfind <name> <value>")
-		fmt.Println("idxrange <name> <lo> <hi>")
-		fmt.Println("idxlist")
-		fmt.Println("scan | flush | compact | stats | exit")
+		fmt.Println("SQL:")
+		fmt.Println("  CREATE TABLE t (id INT, name TEXT, age INT);")
+		fmt.Println("  INSERT INTO t VALUES (1, 'Jayant', 20);")
+		fmt.Println("  SELECT * FROM t WHERE age >= 18 ORDER BY name LIMIT 10;")
+		fmt.Println("  UPDATE t SET age = 21 WHERE id = 1;")
+		fmt.Println("  DELETE FROM t WHERE id = 1;")
+		fmt.Println("  CREATE INDEX idx_t_age ON t (age);")
+		fmt.Println("KV: set/get/del | row/idxcreate | flush | compact | stats | exit")
 		return nil
 	case "exit", "quit":
 		return errQuit
@@ -123,7 +126,12 @@ func run(r *repl, line string) error {
 		}
 		fmt.Println(string(v))
 		return nil
+	case "create", "insert", "select", "update":
+		return runSQL(r, line)
 	case "del", "delete":
+		if cmd == "delete" && strings.HasPrefix(strings.ToLower(rest), "from") {
+			return runSQL(r, line)
+		}
 		if rest == "" {
 			return fmt.Errorf("usage: del <key>")
 		}
@@ -211,6 +219,29 @@ func run(r *repl, line string) error {
 		return nil
 	default:
 		return fmt.Errorf("unknown command %q (try help)", cmd)
+	}
+}
+
+func runSQL(r *repl, line string) error {
+	res, err := r.sql.Exec(line)
+	if err != nil {
+		return err
+	}
+	printSQL(res)
+	return nil
+}
+
+func printSQL(res *engine.Result) {
+	if len(res.Columns) > 0 {
+		fmt.Println(strings.Join(res.Columns, "\t"))
+		for _, row := range res.Rows {
+			fmt.Println(strings.Join(row, "\t"))
+		}
+		fmt.Printf("(%d rows)\n", len(res.Rows))
+		return
+	}
+	if res.Message != "" {
+		fmt.Println(res.Message)
 	}
 }
 
