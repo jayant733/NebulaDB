@@ -32,19 +32,20 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 8 — Replicated shards** is current: each shard is its own Raft group. Writes succeed on a process only when it leads the hashed shard.
+**Phase 10 — Networking** is current: client KV RPC forwards writes to the shard leader. Phase 9 chaos tests cover majority/minority partitions and injected disk errors.
 
 | Capability | Status |
 |------------|--------|
 | KV, WAL, LSM, indexes | Implemented |
 | SQL subset | Implemented |
 | Transactions + isolation | Implemented (not atomic across shards) |
-| Raft cluster | Implemented |
+| Raft per shard | Implemented |
 | Local sharding + rebalance | Implemented |
-| Raft per shard | Implemented (no remote write forward) |
-| Failure injection / K8s | Later phases |
+| Failure injection | Implemented (`nebulactl` + in-process chaos tests) |
+| Client KV RPC (forward) | Implemented (`net/rpc`, not gRPC) |
+| Observability / K8s | Later phases |
 
-Do not claim a separate query-router process, 2PC, or Kubernetes until those phases exist and are tested.
+Do not claim Prometheus metrics, 2PC, or Kubernetes until those phases exist and are tested.
 
 ## Quick start
 
@@ -77,6 +78,14 @@ Two shards, three nodes (shard 1 listens on base port + 1):
 go run ./cmd/nebuladb --data ./d1 --id n1 --shards 2 --peers n1=127.0.0.1:7100,n2=127.0.0.1:7200,n3=127.0.0.1:7300
 go run ./cmd/nebuladb --data ./d2 --id n2 --shards 2 --peers n1=127.0.0.1:7100,n2=127.0.0.1:7200,n3=127.0.0.1:7300
 go run ./cmd/nebuladb --data ./d3 --id n3 --shards 2 --peers n1=127.0.0.1:7100,n2=127.0.0.1:7200,n3=127.0.0.1:7300
+```
+
+Client/admin RPC for n1 is `127.0.0.1:7102` (base + shard count):
+
+```bash
+go run ./cmd/nebulactl 127.0.0.1:7102 isolate
+go run ./cmd/nebulactl 127.0.0.1:7102 heal
+go run ./cmd/nebulactl 127.0.0.1:7102 disk-fail 1
 ```
 
 Interactive commands:

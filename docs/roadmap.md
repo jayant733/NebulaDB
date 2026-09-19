@@ -79,11 +79,11 @@ See [docs/phases/phase-07-sharding.md](phases/phase-07-sharding.md).
 
 Each shard is its own Raft group (leader + followers). See [docs/phases/phase-08-replicated-shards.md](phases/phase-08-replicated-shards.md).
 
-## Phase 9 — Failure injection (in progress)
+## Phase 9 — Failure injection (done)
 
 `nebulactl kill-node`, partitions, disk faults. Chaos tests that assert the guarantees in `consistency.md`. See [docs/phases/phase-09-failure.md](phases/phase-09-failure.md).
 
-## Phase 10 — Networking (in progress)
+## Phase 10 — Networking (done)
 
 Client KV RPC with forward-to-leader, timeouts, retries, and inflight backpressure. See [docs/phases/phase-10-networking.md](phases/phase-10-networking.md).
 

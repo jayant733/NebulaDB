@@ -1,6 +1,6 @@
 # Architecture
 
-## What exists today (Phase 8)
+## What exists today (Phase 10)
 
 Three process modes:
 
@@ -8,7 +8,7 @@ Three process modes:
 2. **One Raft group** (`--shards 1 --peers`): SQL → replicated LSM (Phase 6).
 3. **Shards** (`--shards N`, N≥2): SQL → `shard.Router` → N engines. With `--peers`, each shard is its own Raft group (ports `base+shardIndex`). Without `--peers`, shards are local only (Phase 7).
 
-Writes on a process succeed only when that process is Raft leader for the hashed shard. Tests use `cluster.LeaderPick` to send the write to the current leader. Remote forwarding is Phase 10.
+Writes on a process succeed only when that process is Raft leader for the hashed shard, **or** the client uses KV RPC which forwards to that leader. `nebulactl` talks to the same RPC port for isolate/heal/disk-fail/kill-node.
 
 ## Target architecture (later phases)
 

@@ -62,9 +62,17 @@ Adding a shard and calling `Rebalance` moves only remapped keys (set-then-delete
 
 Each shard has its own Raft log and leader. A write hashes to one shard and is committed when a **majority of that shard's group** has the entry. Killing the leader of shard 0 does not prevent a new write on shard 1.
 
-A `nebuladb` process proposes only if it leads the owning shard (`ErrNotLeader` otherwise). There is no automatic forward to the remote leader. Reads on a follower replica may lag.
+A `nebuladb` process proposes only if it leads the owning shard (`ErrNotLeader` otherwise). Client KV RPC (Phase 10) forwards that write to the current shard leader. Reads on a follower replica may lag unless they go through the client RPC.
 
 Rebalance of keys while Raft groups are running is not implemented.
+
+## Phase 9 (partitions, as tested)
+
+A 3-node group still commits after one follower is isolated. A leader cut off in a minority cannot commit; the majority elects and a new write succeeds. The isolated leader's `Propose` times out or returns `ErrNotLeader`. Injected `storage.ErrDisk` fails `Set` before WAL append.
+
+## Phase 10 (client RPC, as implemented)
+
+`Set`/`Get`/`Delete` over `net/rpc` to any replica are forwarded to the shard leader. Inflight handlers are capped (32). Call deadline is two seconds. SQL is not on the wire.
 
 ## What we will not claim until tested
 

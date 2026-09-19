@@ -14,10 +14,10 @@ Raft stays on the existing `net/rpc` transport (Phase 6). A second stack (gRPC) 
 
 ## Definition of done
 
-- [ ] Client `Set` to a follower succeeds after forward to the shard leader
-- [ ] Retry with leader hint when `ErrNotLeader` races an election
-- [ ] Call timeout is bounded; inflight RPCs cap concurrent handlers
-- [ ] `--rpc` listens at `basePort+shardCount` (after per-shard Raft ports)
+- [x] Client `Set` to a follower succeeds after forward to the shard leader
+- [x] Retry with leader hint when `ErrNotLeader` races an election
+- [x] Call timeout is bounded; inflight RPCs cap concurrent handlers
+- [x] `--rpc` listens at `basePort+shardCount` (after per-shard Raft ports)
 
 ## Ports
 

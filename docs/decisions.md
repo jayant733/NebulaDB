@@ -66,4 +66,12 @@ One Raft log for the whole node would force every shard's writes through a singl
 
 Peer `--id`s are reused across groups; **transports and listen ports are not**. Mixing groups on one `raft.Memory` or one TCP port would deliver `RequestVote` to the wrong state machine.
 
-Network forwarding from a follower to the shard leader is deferred to Phase 10. Until then, a client write succeeds on a process only when that process leads the hashed shard (tests use `LeaderPick`).
+Network forwarding from a follower to the shard leader is Phase 10.
+
+## ADR-011: net/rpc for client KV, not a second gRPC stack
+
+**Status:** Accepted (Phase 10)
+
+The Phase 10 brief named gRPC. Raft already speaks `net/rpc`. Adding protobuf/gRPC for the same process would be two RPC stacks, two listen paths, and a `protoc` build story without a new consistency property.
+
+Client `Get`/`Set`/`Delete` and admin fault commands share one `net/rpc` server per process (`basePort+Nshards`). Timeouts, `ErrNotLeader` retries, and an inflight semaphore are the Phase 10 deliverable. gRPC remains an option if an external client ecosystem needs it.

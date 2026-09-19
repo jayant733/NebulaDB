@@ -12,11 +12,11 @@ Chaos tests that match [docs/consistency.md](../consistency.md). `nebulactl` tal
 
 ## Definition of done
 
-- [ ] Majority of a 3-node group still commits after one follower is isolated
-- [ ] Leader in a minority cannot commit; the majority elects and a new write succeeds
-- [ ] Two partitions do not both accept writes for the same shard (no split-brain commit)
-- [ ] Injected disk errors fail `Set` before the WAL record is durable
-- [ ] `nebulactl kill-node|partition|heal|disk-fail` call admin RPC
+- [x] Majority of a 3-node group still commits after one follower is isolated
+- [x] Leader in a minority cannot commit; the majority elects and a new write succeeds
+- [x] Two partitions do not both accept writes for the same shard (no split-brain commit)
+- [x] Injected disk errors fail `Set` before the WAL record is durable
+- [x] `nebulactl <admin-addr> kill-node|stop|isolate|heal|disk-fail [n]` call admin RPC
 
 ## Faults
 
