@@ -10,7 +10,7 @@ import (
 
 var (
 	// ErrNotLeader is returned when a follower/candidate receives a client write.
-	ErrNotLeader = errors.New("raft: not leader")
+	ErrNotLeader   = errors.New("raft: not leader")
 	errUnreachable = errors.New("raft: unreachable")
 )
 
@@ -84,20 +84,20 @@ func Start(cfg Config) (*Node, error) {
 		}
 	}
 	n := &Node{
-		id:        cfg.ID,
-		peers:     others,
-		apply:     cfg.Apply,
-		trans:     cfg.Transport,
-		persist:   p,
-		heartbeat: cfg.Heartbeat,
-		elMin:     cfg.ElectionMin,
-		elMax:     cfg.ElectionMax,
-		role:      Follower,
-		nextIndex: map[ID]uint64{},
+		id:         cfg.ID,
+		peers:      others,
+		apply:      cfg.Apply,
+		trans:      cfg.Transport,
+		persist:    p,
+		heartbeat:  cfg.Heartbeat,
+		elMin:      cfg.ElectionMin,
+		elMax:      cfg.ElectionMax,
+		role:       Follower,
+		nextIndex:  map[ID]uint64{},
 		matchIndex: map[ID]uint64{},
-		wait:      map[uint64]chan error{},
-		stop:      make(chan struct{}),
-		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		wait:       map[uint64]chan error{},
+		stop:       make(chan struct{}),
+		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	n.resetElectionLocked()
 	go n.loop()
@@ -112,6 +112,7 @@ func (n *Node) Stop() {
 		return
 	}
 	n.stopped = true
+	n.role = Follower
 	close(n.stop)
 	n.failWaitersLocked(ErrNotLeader)
 	n.mu.Unlock()
@@ -121,7 +122,12 @@ func (n *Node) Stop() {
 func (n *Node) IsLeader() bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return n.role == Leader
+	return !n.stopped && n.role == Leader
+}
+
+// ID is this server's stable identifier.
+func (n *Node) ID() ID {
+	return n.id
 }
 
 // LeaderID is the last known leader (may be empty).
