@@ -13,12 +13,12 @@ A **query router** places each LSM key on one of N local shards using a **consis
 
 ## Definition of done
 
-- [ ] Same key always maps to the same shard while the ring is unchanged
-- [ ] `Set`/`Get`/`Delete` go to that shard only
-- [ ] `ScanPrefix` visits every shard and returns a merged, sorted view
-- [ ] Adding a shard and `Rebalance` moves only keys whose owner changed; no key is lost
-- [ ] SQL and the REPL work on the router (scatter-gather scans)
-- [ ] `--shards` and `--peers` are not combined (replicated shards are Phase 8)
+- [x] Same key always maps to the same shard while the ring is unchanged
+- [x] `Set`/`Get`/`Delete` go to that shard only
+- [x] `ScanPrefix` visits every shard and returns a merged, sorted view
+- [x] Adding a shard and `Rebalance` moves only keys whose owner changed; no key is lost
+- [x] SQL and the REPL work on the router (scatter-gather scans)
+- [x] `--shards` and `--peers` are not combined (replicated shards are Phase 8)
 
 ## Routing key
 
@@ -58,3 +58,7 @@ data/shard-2/
 ```
 
 `--shards 1` (default) keeps the Phase 1–6 layout: files directly under `--data`.
+
+```
+go run ./cmd/nebuladb --data ./data --shards 3
+```

@@ -50,6 +50,14 @@ Writes succeed only on the **leader** after **majority** log replication. Follow
 
 Network partitions and split-brain tests are Phase 9.
 
+## Phase 7 (local shards, as implemented)
+
+Each key lives on exactly one local `storage.Engine` chosen by a consistent hash of the **full LSM key**. A point `Get`/`Set`/`Delete` touches that shard only. `ScanPrefix` merges every shard.
+
+`COMMIT` still applies keys one at a time. A crash can leave a prefix of a multi-key transaction persisted **across several WALs**. There is no two-phase commit.
+
+Adding a shard and calling `Rebalance` moves only remapped keys (set-then-delete). Until rebalance, lookups use the **new** ring, so keys that have not moved yet are not found — callers must rebalance after `Attach` before serving traffic.
+
 ## What we will not claim until tested
 
 - "CP in CAP" without partition tests

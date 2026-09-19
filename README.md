@@ -32,17 +32,18 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 6 — Raft** is current: leader election, log replication, majority commit, and failover. SQL and KV writes succeed only on the leader.
+**Phase 7 — Sharding** is current: a consistent-hash router over local LSM engines. Raft is still one replica group for the whole node (Phase 6), not per shard.
 
 | Capability | Status |
 |------------|--------|
 | KV, WAL, LSM, indexes | Implemented |
 | SQL subset | Implemented |
-| Transactions + isolation | Implemented |
-| Raft cluster | Implemented |
-| Sharding / K8s | Later phases |
+| Transactions + isolation | Implemented (not atomic across shards) |
+| Raft cluster | Implemented (one group, not per shard) |
+| Local sharding + rebalance | Implemented |
+| Replicated shards / K8s | Later phases |
 
-Do not claim sharded SQL or Kubernetes until those phases exist and are tested.
+Do not claim Raft-per-shard, distributed transactions, or Kubernetes until those phases exist and are tested.
 
 ## Quick start
 
@@ -61,6 +62,12 @@ Three-node cluster (three terminals; write on the leader):
 go run ./cmd/nebuladb --data ./d1 --id n1 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
 go run ./cmd/nebuladb --data ./d2 --id n2 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
 go run ./cmd/nebuladb --data ./d3 --id n3 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
+```
+
+Local shards (one process, three engines):
+
+```bash
+go run ./cmd/nebuladb --data ./data --shards 3
 ```
 
 Interactive commands:

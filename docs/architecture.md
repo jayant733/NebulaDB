@@ -1,21 +1,13 @@
 # Architecture
 
-## What exists today (Phase 6)
+## What exists today (Phase 7)
 
-```
-  REPL / SQL  (writes on leader only)
-       │
-  cluster.Replicated  →  Raft Propose
-       │
-  apply log  →  storage.Engine (WAL + MemTable + SSTables)
-```
+Two process modes (not combined):
 
-- The **WAL is the source of truth** on each node's disk.
-- **Raft** replicates `Set`/`Delete` commands; apply writes the local LSM.
-- Recent mutations live in the **MemTable**; older data lives in **SSTables**.
-- After flush, the WAL is rotated. Raft state lives under `<data>/raft/`.
-- On `Open`, the engine loads MANIFEST SSTables, then replays the WAL.
-- Single-process mode (no `--peers`) is still a local Engine with no Raft.
+1. **Single engine** (`--shards 1`, default): SQL → optional Raft replica of one LSM.
+2. **Local shards** (`--shards N`, N≥2): SQL → `shard.Router` → N engines under `data/shard-*`. Prefix scans scatter-gather. Rebalance is in-process (`Attach` + `Rebalance`).
+
+Raft-per-shard is Phase 8. `--shards` and `--peers` cannot be set together.
 
 ## Target architecture (later phases)
 
