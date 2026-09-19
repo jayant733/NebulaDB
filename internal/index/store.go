@@ -16,23 +16,23 @@ type Spec struct {
 	Field int
 }
 
-// Store maintains primary rows and LSM secondary indexes on an Engine.
+// Store maintains primary rows and LSM secondary indexes.
 type Store struct {
 	mu    sync.Mutex
-	eng   *storage.Engine
+	kv    storage.KV
 	table string
 	specs []Spec
 }
 
 // Wrap loads the index catalog for the default (unnamed) table.
-func Wrap(eng *storage.Engine) (*Store, error) {
-	return WrapTable(eng, "")
+func Wrap(kv storage.KV) (*Store, error) {
+	return WrapTable(kv, "")
 }
 
 // WrapTable loads the index catalog for a named table.
-func WrapTable(eng *storage.Engine, table string) (*Store, error) {
-	s := &Store{eng: eng, table: table}
-	raw, ok, err := eng.Get(catalogKey(table))
+func WrapTable(kv storage.KV, table string) (*Store, error) {
+	s := &Store{kv: kv, table: table}
+	raw, ok, err := kv.Get(catalogKey(table))
 	if err != nil {
 		return nil, err
 	}
@@ -46,8 +46,8 @@ func WrapTable(eng *storage.Engine, table string) (*Store, error) {
 	return s, nil
 }
 
-// Engine returns the underlying KV engine.
-func (s *Store) Engine() *storage.Engine { return s.eng }
+// KV returns the underlying store (engine or transaction).
+func (s *Store) KV() storage.KV { return s.kv }
 
 // Indexes returns a copy of the catalog.
 func (s *Store) Indexes() []Spec {
@@ -86,7 +86,7 @@ func (s *Store) CreateIndex(name string, field int) error {
 		rows        []pair
 		backfillErr error
 	)
-	s.eng.ScanPrefix(PrimaryPrefix(s.table), func(k, v []byte) bool {
+	s.kv.ScanPrefix(PrimaryPrefix(s.table), func(k, v []byte) bool {
 		pk, ok := parsePrimary(s.table, k)
 		if !ok {
 			return true
@@ -125,12 +125,12 @@ func (s *Store) DropIndex(name string) error {
 		return fmt.Errorf("index: %q not found", name)
 	}
 	var keys [][]byte
-	s.eng.ScanPrefix(SecondaryPrefixAll(s.table, name), func(k, v []byte) bool {
+	s.kv.ScanPrefix(SecondaryPrefixAll(s.table, name), func(k, v []byte) bool {
 		keys = append(keys, append([]byte(nil), k...))
 		return true
 	})
 	for _, k := range keys {
-		if err := s.eng.Delete(k); err != nil {
+		if err := s.kv.Delete(k); err != nil {
 			return err
 		}
 	}
@@ -145,7 +145,7 @@ func (s *Store) PutRow(pk []byte, fields [][]byte) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	old, ok, err := s.eng.Get(PrimaryKey(s.table, pk))
+	old, ok, err := s.kv.Get(PrimaryKey(s.table, pk))
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (s *Store) PutRow(pk []byte, fields [][]byte) error {
 			return err
 		}
 	}
-	if err := s.eng.Set(PrimaryKey(s.table, pk), row.Encode(fields)); err != nil {
+	if err := s.kv.Set(PrimaryKey(s.table, pk), row.Encode(fields)); err != nil {
 		return err
 	}
 	return s.addAllSecondaryLocked(pk, fields)
@@ -166,7 +166,7 @@ func (s *Store) PutRow(pk []byte, fields [][]byte) error {
 
 // GetRow decodes the primary tuple.
 func (s *Store) GetRow(pk []byte) ([][]byte, bool, error) {
-	v, ok, err := s.eng.Get(PrimaryKey(s.table, pk))
+	v, ok, err := s.kv.Get(PrimaryKey(s.table, pk))
 	if err != nil || !ok {
 		return nil, ok, err
 	}
@@ -181,7 +181,7 @@ func (s *Store) GetRow(pk []byte) ([][]byte, bool, error) {
 func (s *Store) DeleteRow(pk []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	old, ok, err := s.eng.Get(PrimaryKey(s.table, pk))
+	old, ok, err := s.kv.Get(PrimaryKey(s.table, pk))
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (s *Store) DeleteRow(pk []byte) error {
 	if err := s.removeAllSecondaryLocked(pk, fields); err != nil {
 		return err
 	}
-	return s.eng.Delete(PrimaryKey(s.table, pk))
+	return s.kv.Delete(PrimaryKey(s.table, pk))
 }
 
 // Find returns primary keys with indexed field equal to sk (SK order, then pk).
@@ -204,7 +204,7 @@ func (s *Store) Find(name string, sk []byte) ([][]byte, error) {
 		return nil, err
 	}
 	var pks [][]byte
-	s.eng.ScanPrefix(SecondaryPrefixSK(s.table, name, sk), func(k, v []byte) bool {
+	s.kv.ScanPrefix(SecondaryPrefixSK(s.table, name, sk), func(k, v []byte) bool {
 		_, pk, ok := parseSecondary(s.table, name, k)
 		if ok {
 			pks = append(pks, append([]byte(nil), pk...))
@@ -221,7 +221,7 @@ func (s *Store) RangeFind(name string, lo, hi []byte) ([][]byte, error) {
 	}
 	idx := name
 	var pks [][]byte
-	s.eng.ScanPrefix(SecondaryPrefixAll(s.table, idx), func(k, v []byte) bool {
+	s.kv.ScanPrefix(SecondaryPrefixAll(s.table, idx), func(k, v []byte) bool {
 		sk, pk, ok := parseSecondary(s.table, idx, k)
 		if !ok {
 			return true
@@ -241,7 +241,7 @@ func (s *Store) RangeFind(name string, lo, hi []byte) ([][]byte, error) {
 // ScanRows visits all primary rows in pk order.
 func (s *Store) ScanRows(fn func(pk []byte, fields [][]byte) bool) error {
 	var err error
-	s.eng.ScanPrefix(PrimaryPrefix(s.table), func(k, v []byte) bool {
+	s.kv.ScanPrefix(PrimaryPrefix(s.table), func(k, v []byte) bool {
 		pk, ok := parsePrimary(s.table, k)
 		if !ok {
 			return true
@@ -280,7 +280,7 @@ func (s *Store) spec(name string) (Spec, error) {
 }
 
 func (s *Store) persistCatalog() error {
-	return s.eng.Set(catalogKey(s.table), encodeCatalog(s.specs))
+	return s.kv.Set(catalogKey(s.table), encodeCatalog(s.specs))
 }
 
 func (s *Store) addAllSecondaryLocked(pk []byte, fields [][]byte) error {
@@ -298,7 +298,7 @@ func (s *Store) removeAllSecondaryLocked(pk []byte, fields [][]byte) error {
 		if !ok {
 			continue
 		}
-		if err := s.eng.Delete(SecondaryKey(s.table, sp.Name, sk, pk)); err != nil {
+		if err := s.kv.Delete(SecondaryKey(s.table, sp.Name, sk, pk)); err != nil {
 			return err
 		}
 	}
@@ -310,7 +310,7 @@ func (s *Store) addSecondaryLocked(idx string, field int, pk []byte, fields [][]
 	if !ok {
 		return nil
 	}
-	return s.eng.Set(SecondaryKey(s.table, idx, sk, pk), nil)
+	return s.kv.Set(SecondaryKey(s.table, idx, sk, pk), nil)
 }
 
 func bytesContainsNUL(s string) bool {

@@ -47,8 +47,10 @@ type Engine struct {
 	opts   Options
 	wal    *wal.WAL
 	mem    *memtable.Table
-	ssts   []*sstable.Reader // oldest → newest
-	nextID uint64
+	ssts     []*sstable.Reader // oldest → newest
+	nextID   uint64
+	seq      uint64
+	versions map[string]uint64
 }
 
 // Open creates dir if needed, loads SSTables from MANIFEST, then replays the WAL.
@@ -107,7 +109,7 @@ func Open(opts Options) (*Engine, error) {
 		}
 		return nil, err
 	}
-	return &Engine{opts: opts, wal: w, mem: mem, ssts: ssts, nextID: maxID + 1}, nil
+	return &Engine{opts: opts, wal: w, mem: mem, ssts: ssts, nextID: maxID + 1, versions: map[string]uint64{}}, nil
 }
 
 // Close syncs the WAL and closes SSTables.
@@ -135,6 +137,10 @@ func (e *Engine) Set(key, value []byte) error {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.setLocked(key, value)
+}
+
+func (e *Engine) setLocked(key, value []byte) error {
 	if e.wal == nil {
 		return fmt.Errorf("storage: engine closed")
 	}
@@ -142,6 +148,7 @@ func (e *Engine) Set(key, value []byte) error {
 		return err
 	}
 	e.mem.Put(key, value)
+	e.bumpVersion(key)
 	return e.maybeFlushLocked()
 }
 
@@ -152,6 +159,10 @@ func (e *Engine) Delete(key []byte) error {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.deleteLocked(key)
+}
+
+func (e *Engine) deleteLocked(key []byte) error {
 	if e.wal == nil {
 		return fmt.Errorf("storage: engine closed")
 	}
@@ -159,7 +170,16 @@ func (e *Engine) Delete(key []byte) error {
 		return err
 	}
 	e.mem.Delete(key)
+	e.bumpVersion(key)
 	return e.maybeFlushLocked()
+}
+
+func (e *Engine) bumpVersion(key []byte) {
+	e.seq++
+	if e.versions == nil {
+		e.versions = map[string]uint64{}
+	}
+	e.versions[string(key)] = e.seq
 }
 
 func (e *Engine) maybeFlushLocked() error {
@@ -238,6 +258,10 @@ func (e *Engine) Get(key []byte) ([]byte, bool, error) {
 	if e.wal == nil {
 		return nil, false, fmt.Errorf("storage: engine closed")
 	}
+	return e.getLocked(key)
+}
+
+func (e *Engine) getLocked(key []byte) ([]byte, bool, error) {
 	if v, st := e.mem.Lookup(key); st == memtable.Found {
 		return v, true, nil
 	} else if st == memtable.Deleted {
@@ -299,6 +323,10 @@ func (e *Engine) Stats() Stats {
 func (e *Engine) Scan(fn func(key, value []byte) bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.scanLiveLocked(fn)
+}
+
+func (e *Engine) scanLiveLocked(fn func(key, value []byte) bool) {
 	latest := map[string]sstable.Entry{}
 	for _, s := range e.ssts {
 		it := s.Iter()
