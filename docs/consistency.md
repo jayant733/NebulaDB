@@ -58,6 +58,14 @@ Each key lives on exactly one local `storage.Engine` chosen by a consistent hash
 
 Adding a shard and calling `Rebalance` moves only remapped keys (set-then-delete). Until rebalance, lookups use the **new** ring, so keys that have not moved yet are not found — callers must rebalance after `Attach` before serving traffic.
 
+## Phase 8 (Raft per shard, as implemented)
+
+Each shard has its own Raft log and leader. A write hashes to one shard and is committed when a **majority of that shard's group** has the entry. Killing the leader of shard 0 does not prevent a new write on shard 1.
+
+A `nebuladb` process proposes only if it leads the owning shard (`ErrNotLeader` otherwise). There is no automatic forward to the remote leader. Reads on a follower replica may lag.
+
+Rebalance of keys while Raft groups are running is not implemented.
+
 ## What we will not claim until tested
 
 - "CP in CAP" without partition tests

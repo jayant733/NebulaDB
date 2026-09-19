@@ -1,13 +1,14 @@
 # Architecture
 
-## What exists today (Phase 7)
+## What exists today (Phase 8)
 
-Two process modes (not combined):
+Three process modes:
 
-1. **Single engine** (`--shards 1`, default): SQL → optional Raft replica of one LSM.
-2. **Local shards** (`--shards N`, N≥2): SQL → `shard.Router` → N engines under `data/shard-*`. Prefix scans scatter-gather. Rebalance is in-process (`Attach` + `Rebalance`).
+1. **Single engine** (`--shards 1`, no `--peers`): SQL → one LSM.
+2. **One Raft group** (`--shards 1 --peers`): SQL → replicated LSM (Phase 6).
+3. **Shards** (`--shards N`, N≥2): SQL → `shard.Router` → N engines. With `--peers`, each shard is its own Raft group (ports `base+shardIndex`). Without `--peers`, shards are local only (Phase 7).
 
-Raft-per-shard is Phase 8. `--shards` and `--peers` cannot be set together.
+Writes on a process succeed only when that process is Raft leader for the hashed shard. Tests use `cluster.LeaderPick` to send the write to the current leader. Remote forwarding is Phase 10.
 
 ## Target architecture (later phases)
 

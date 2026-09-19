@@ -32,18 +32,19 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 7 — Sharding** is current: a consistent-hash router over local LSM engines. Raft is still one replica group for the whole node (Phase 6), not per shard.
+**Phase 8 — Replicated shards** is current: each shard is its own Raft group. Writes succeed on a process only when it leads the hashed shard.
 
 | Capability | Status |
 |------------|--------|
 | KV, WAL, LSM, indexes | Implemented |
 | SQL subset | Implemented |
 | Transactions + isolation | Implemented (not atomic across shards) |
-| Raft cluster | Implemented (one group, not per shard) |
+| Raft cluster | Implemented |
 | Local sharding + rebalance | Implemented |
-| Replicated shards / K8s | Later phases |
+| Raft per shard | Implemented (no remote write forward) |
+| Failure injection / K8s | Later phases |
 
-Do not claim Raft-per-shard, distributed transactions, or Kubernetes until those phases exist and are tested.
+Do not claim a separate query-router process, 2PC, or Kubernetes until those phases exist and are tested.
 
 ## Quick start
 
@@ -68,6 +69,14 @@ Local shards (one process, three engines):
 
 ```bash
 go run ./cmd/nebuladb --data ./data --shards 3
+```
+
+Two shards, three nodes (shard 1 listens on base port + 1):
+
+```bash
+go run ./cmd/nebuladb --data ./d1 --id n1 --shards 2 --peers n1=127.0.0.1:7100,n2=127.0.0.1:7200,n3=127.0.0.1:7300
+go run ./cmd/nebuladb --data ./d2 --id n2 --shards 2 --peers n1=127.0.0.1:7100,n2=127.0.0.1:7200,n3=127.0.0.1:7300
+go run ./cmd/nebuladb --data ./d3 --id n3 --shards 2 --peers n1=127.0.0.1:7100,n2=127.0.0.1:7200,n3=127.0.0.1:7300
 ```
 
 Interactive commands:

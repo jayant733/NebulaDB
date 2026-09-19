@@ -13,12 +13,12 @@ Each **shard** is an independent Raft group. A process hosts one replica of ever
 
 ## Definition of done
 
-- [ ] Two shards × three nodes: each shard elects its own leader (leaders may differ)
-- [ ] A write hashes to a shard and commits on **that** shard's majority
-- [ ] Isolating the leader of shard 0 does not block a new write on shard 1
-- [ ] After shard 0 failover, a write for a shard-0 key succeeds on the new leader
-- [ ] Followers of a shard reject `Propose` (`ErrNotLeader`)
-- [ ] `--shards N --peers ...` is allowed; ports are `base+shardIndex`
+- [x] Two shards × three nodes: each shard elects its own leader (leaders may differ)
+- [x] A write hashes to a shard and commits on **that** shard's majority
+- [x] Isolating the leader of shard 0 does not block a new write on shard 1
+- [x] After shard 0 failover, a write for a shard-0 key succeeds on the new leader
+- [x] Followers of a shard reject `Propose` (`ErrNotLeader`)
+- [x] `--shards N --peers ...` is allowed; ports are `base+shardIndex`
 
 ## Topology
 
