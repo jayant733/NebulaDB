@@ -3,6 +3,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,9 @@ import (
 	"github.com/jayant/nebuladb/internal/storage/sstable"
 	"github.com/jayant/nebuladb/internal/storage/wal"
 )
+
+// ErrDisk is returned when a test injector fails a write before WAL append.
+var ErrDisk = errors.New("storage: injected disk error")
 
 // SyncMode controls when the WAL is fsynced.
 type SyncMode int
@@ -28,10 +32,10 @@ const walFileName = "wal-000001.log"
 
 // Options configure Engine.Open.
 type Options struct {
-	Dir            string
-	Sync           SyncMode
-	MemtableBytes  int64 // flush when MemTable reaches this size; 0 → 1 MiB
-	CompactN       int   // compact all SSTables when count ≥ N; 0 → 4
+	Dir           string
+	Sync          SyncMode
+	MemtableBytes int64 // flush when MemTable reaches this size; 0 → 1 MiB
+	CompactN      int   // compact all SSTables when count ≥ N; 0 → 4
 }
 
 func (o Options) memLimit() int64 {
@@ -43,14 +47,15 @@ func (o Options) memLimit() int64 {
 
 // Engine is a single-node KV store.
 type Engine struct {
-	mu     sync.Mutex
-	opts   Options
-	wal    *wal.WAL
-	mem    *memtable.Table
-	ssts     []*sstable.Reader // oldest → newest
-	nextID   uint64
-	seq      uint64
-	versions map[string]uint64
+	mu         sync.Mutex
+	opts       Options
+	wal        *wal.WAL
+	mem        *memtable.Table
+	ssts       []*sstable.Reader // oldest → newest
+	nextID     uint64
+	seq        uint64
+	versions   map[string]uint64
+	failWrites int
 }
 
 // Open creates dir if needed, loads SSTables from MANIFEST, then replays the WAL.
@@ -144,6 +149,9 @@ func (e *Engine) setLocked(key, value []byte) error {
 	if e.wal == nil {
 		return fmt.Errorf("storage: engine closed")
 	}
+	if err := e.faultLocked(); err != nil {
+		return err
+	}
 	if err := e.wal.Append(wal.Record{Type: wal.RecPut, Key: key, Value: value}); err != nil {
 		return err
 	}
@@ -166,12 +174,30 @@ func (e *Engine) deleteLocked(key []byte) error {
 	if e.wal == nil {
 		return fmt.Errorf("storage: engine closed")
 	}
+	if err := e.faultLocked(); err != nil {
+		return err
+	}
 	if err := e.wal.Append(wal.Record{Type: wal.RecDelete, Key: key}); err != nil {
 		return err
 	}
 	e.mem.Delete(key)
 	e.bumpVersion(key)
 	return e.maybeFlushLocked()
+}
+
+// InjectDiskErrors fails the next n Set/Delete calls before WAL append.
+func (e *Engine) InjectDiskErrors(n int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.failWrites = n
+}
+
+func (e *Engine) faultLocked() error {
+	if e.failWrites <= 0 {
+		return nil
+	}
+	e.failWrites--
+	return ErrDisk
 }
 
 func (e *Engine) bumpVersion(key []byte) {
