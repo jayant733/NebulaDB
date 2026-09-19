@@ -69,9 +69,11 @@ Three-node cluster, leader election, replicated log, majority commit, failover. 
 
 See [docs/phases/phase-06-raft.md](phases/phase-06-raft.md).
 
-## Phase 7 — Sharding
+## Phase 7 — Sharding (in progress)
 
-Query router + consistent hashing. Rebalance is a later step inside this phase.
+Query router + consistent hashing over local LSM engines. Rebalance moves keys whose owner changed. Raft-per-shard is Phase 8.
+
+See [docs/phases/phase-07-sharding.md](phases/phase-07-sharding.md).
 
 ## Phase 8 — Replicated shards
 

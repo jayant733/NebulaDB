@@ -47,3 +47,13 @@ The marketing bullets in the original brief are a **target**, not the README. Up
 **Status:** Accepted (Phase 3)
 
 Secondary keys are ordinary LSM records, so they share WAL, flush, and crash recovery with primary rows. A separate B+ tree is implemented for split/range algorithms; it is in-memory in this phase. SQL `CREATE INDEX` will attach to the LSM catalog first.
+
+## ADR-009: Hash the full LSM key; scatter-gather prefix scans
+
+**Status:** Accepted (Phase 7)
+
+Sharding by SQL primary key alone would split a row from its secondary-index entries and from the catalog unless every related key used the same routing id. Hashing the **entire LSM key** keeps the router a pure `storage.KV` and reuses SQL/index without a second key scheme.
+
+Cost: `ScanPrefix` (table scans, index range, catalog backfill) must query every shard and merge. That is acceptable until the planner can push a single-key `Get`.
+
+Replicated shards (one Raft group per shard) stay Phase 8 so Phase 7 can test placement and rebalance on one process.
