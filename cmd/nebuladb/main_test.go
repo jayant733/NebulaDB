@@ -98,3 +98,33 @@ func TestREPLSQL(t *testing.T) {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
+
+func TestREPLTxnRollback(t *testing.T) {
+	eng, err := storage.Open(storage.Options{Dir: t.TempDir(), Sync: storage.SyncAlways})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+	idx, _ := index.Wrap(eng)
+	se, err := sqlengine.New(eng)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &repl{eng: eng, idx: idx, sql: se}
+	if err := run(r, "CREATE TABLE t (id INT, v TEXT)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(r, "BEGIN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(r, "INSERT INTO t VALUES (1, 'x')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(r, "ROLLBACK"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := se.Exec("SELECT * FROM t")
+	if err != nil || len(res.Rows) != 0 {
+		t.Fatalf("rollback leaked %+v %v", res, err)
+	}
+}

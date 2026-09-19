@@ -48,8 +48,8 @@ func main() {
 	}
 	r := &repl{eng: eng, idx: idx, sql: sqleng}
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 4 — SQL  data=%s  sync=%v\n", *data, !*nosync)
-	fmt.Fprintln(os.Stderr, "SQL: CREATE TABLE / INSERT / SELECT / UPDATE / DELETE  (semicolon optional)")
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 5 — SQL + txns  data=%s  sync=%v\n", *data, !*nosync)
+	fmt.Fprintln(os.Stderr, "SQL: CREATE/INSERT/SELECT/UPDATE/DELETE | BEGIN/COMMIT/ROLLBACK")
 	fmt.Fprintln(os.Stderr, "KV:  set | get | del | flush | help | exit")
 
 	sc := bufio.NewScanner(os.Stdin)
@@ -89,7 +89,7 @@ func run(r *repl, line string) error {
 		fmt.Println("  SELECT * FROM t WHERE age >= 18 ORDER BY name LIMIT 10;")
 		fmt.Println("  UPDATE t SET age = 21 WHERE id = 1;")
 		fmt.Println("  DELETE FROM t WHERE id = 1;")
-		fmt.Println("  CREATE INDEX idx_t_age ON t (age);")
+		fmt.Println("  BEGIN;  COMMIT;  ROLLBACK;  BEGIN REPEATABLE READ;")
 		fmt.Println("KV: set/get/del | row/idxcreate | flush | compact | stats | exit")
 		return nil
 	case "exit", "quit":
@@ -126,7 +126,7 @@ func run(r *repl, line string) error {
 		}
 		fmt.Println(string(v))
 		return nil
-	case "create", "insert", "select", "update":
+	case "create", "insert", "select", "update", "begin", "commit", "rollback":
 		return runSQL(r, line)
 	case "del", "delete":
 		if cmd == "delete" && strings.HasPrefix(strings.ToLower(rest), "from") {
