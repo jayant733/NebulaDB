@@ -21,13 +21,14 @@ import (
 var errQuit = errors.New("quit")
 
 type repl struct {
-	eng  *storage.Engine
-	engs []*storage.Engine
-	kv   storage.KV
-	idx  *index.Store
-	sql  *engine.Engine
-	node *raft.Node
-	id   string
+	eng   *storage.Engine
+	engs  []*storage.Engine
+	kv    storage.KV
+	idx   *index.Store
+	sql   *engine.Engine
+	node  *raft.Node
+	nodes []*raft.Node
+	id    string
 }
 
 func main() {
@@ -35,14 +36,11 @@ func main() {
 	nosync := flag.Bool("no-sync", false, "disable fsync (not crash-safe; for experiments)")
 	id := flag.String("id", "", "raft node id (cluster mode)")
 	peers := flag.String("peers", "", "raft peers id=host:port,...")
-	nshards := flag.Int("shards", 1, "local shard count (Phase 7; not with --peers)")
+	nshards := flag.Int("shards", 1, "shard count (with --peers, one Raft group each)")
 	flag.Parse()
 
 	if *nshards < 1 {
 		fatalf("--shards must be >= 1")
-	}
-	if *nshards > 1 && strings.TrimSpace(*peers) != "" {
-		fatalf("--shards and --peers cannot be combined (replicated shards are Phase 8)")
 	}
 
 	sync := storage.SyncAlways
@@ -51,13 +49,42 @@ func main() {
 	}
 
 	var (
-		eng  *storage.Engine
-		engs []*storage.Engine
-		kv   storage.KV
-		node *raft.Node
-		err  error
+		eng   *storage.Engine
+		engs  []*storage.Engine
+		kv    storage.KV
+		node  *raft.Node
+		nodes []*raft.Node
+		err   error
 	)
-	if *nshards > 1 {
+	peersStr := strings.TrimSpace(*peers)
+	if *nshards > 1 && peersStr != "" {
+		if *id == "" {
+			fatalf("--id is required with --peers")
+		}
+		addrs, ids, err := cluster.ParsePeers(peersStr)
+		if err != nil {
+			fatalf("%v", err)
+		}
+		h, err := cluster.StartHost(cluster.HostConfig{
+			Dir:    *data,
+			Shards: *nshards,
+			ID:     raft.ID(*id),
+			Peers:  ids,
+			Addrs:  addrs,
+			Sync:   sync,
+		})
+		if err != nil {
+			fatalf("host: %v", err)
+		}
+		defer h.Close()
+		for _, rep := range h.Replicas {
+			engs = append(engs, rep.Local)
+			nodes = append(nodes, rep.Node)
+		}
+		kv = h.Router
+		eng = engs[0]
+		fmt.Fprintf(os.Stderr, "raft-per-shard id=%s shards=%d\n", *id, *nshards)
+	} else if *nshards > 1 {
 		var rt *shard.Router
 		rt, engs, err = shard.OpenLocal(*data, *nshards, sync)
 		if err != nil {
@@ -120,9 +147,9 @@ func main() {
 	if err != nil {
 		fatalf("sql: %v", err)
 	}
-	r := &repl{eng: eng, engs: engs, kv: kv, idx: idx, sql: sqleng, node: node, id: *id}
+	r := &repl{eng: eng, engs: engs, kv: kv, idx: idx, sql: sqleng, node: node, nodes: nodes, id: *id}
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 7 — shards=%d  data=%s  sync=%v\n", *nshards, *data, !*nosync)
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 8 — shards=%d  data=%s  sync=%v\n", *nshards, *data, !*nosync)
 	fmt.Fprintln(os.Stderr, "SQL: CREATE/INSERT/SELECT/UPDATE/DELETE | BEGIN/COMMIT/ROLLBACK")
 	fmt.Fprintln(os.Stderr, "KV:  set | get | del | flush | help | exit")
 
@@ -195,6 +222,9 @@ func run(r *repl, line string) error {
 			dir, len(r.engs), live, approx, sst, wal, bc, bn, len(r.idx.Indexes()))
 		if r.node != nil {
 			fmt.Printf("raft id=%s leader=%s is_leader=%v\n", r.id, r.node.LeaderID(), r.node.IsLeader())
+		}
+		for i, n := range r.nodes {
+			fmt.Printf("shard %d raft id=%s leader=%s is_leader=%v\n", i, r.id, n.LeaderID(), n.IsLeader())
 		}
 		return nil
 	case "scan":
