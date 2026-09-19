@@ -2,6 +2,7 @@ package shard
 
 import (
 	"bytes"
+	"strconv"
 	"testing"
 
 	"github.com/jayant/nebuladb/internal/storage"
@@ -82,6 +83,54 @@ func TestRouterScanPrefix(t *testing.T) {
 	})
 	if len(got) != 2 || got[0] != "p/a" || got[1] != "p/b" {
 		t.Fatalf("%v", got)
+	}
+}
+
+func TestRebalanceMovesOnlyRemappedKeys(t *testing.T) {
+	rt, engs := openRouter(t, 2)
+	defer closeEngines(engs)
+	const n = 200
+	for i := 0; i < n; i++ {
+		k := []byte("k" + strconv.Itoa(i))
+		if err := rt.Set(k, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	extra, err := storage.Open(storage.Options{Dir: t.TempDir(), Sync: storage.SyncNone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer extra.Close()
+	if err := rt.Attach("2", extra); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Rebalance(); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[ID]*storage.Engine{"0": engs[0], "1": engs[1], "2": extra}
+	for i := 0; i < n; i++ {
+		k := []byte("k" + strconv.Itoa(i))
+		v, ok, err := rt.Get(k)
+		if err != nil || !ok || !bytes.Equal(v, k) {
+			t.Fatalf("lost %s: %v %v %q", k, ok, err, v)
+		}
+		owner := rt.Owner(k)
+		hits := 0
+		for id, e := range byID {
+			_, found, err := e.Get(k)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if found {
+				hits++
+				if id != owner {
+					t.Fatalf("%s on %s want %s", k, id, owner)
+				}
+			}
+		}
+		if hits != 1 {
+			t.Fatalf("%s hits %d", k, hits)
+		}
 	}
 }
 

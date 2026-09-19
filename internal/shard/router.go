@@ -33,6 +33,61 @@ func NewRouter(ring *Ring, stores map[ID]storage.KV) (*Router, error) {
 	return &Router{ring: ring, stores: cp}, nil
 }
 
+// Attach adds a physical shard and rebuilds the ring. Call Rebalance to move keys.
+func (r *Router) Attach(id ID, kv storage.KV) error {
+	if kv == nil || id == "" {
+		return fmt.Errorf("shard: invalid attach")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.stores[id]; ok {
+		return fmt.Errorf("shard: %q already attached", id)
+	}
+	ids := append(r.ring.IDs(), id)
+	ring, err := NewRing(ids, r.ring.VNodes())
+	if err != nil {
+		return err
+	}
+	r.stores[id] = kv
+	r.ring = ring
+	return nil
+}
+
+// Rebalance moves keys whose owner changed. Set on the new shard, then delete on the old.
+func (r *Router) Rebalance() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	type move struct {
+		key, val []byte
+		from, to ID
+	}
+	var moves []move
+	for from, kv := range r.stores {
+		from := from
+		kv.ScanPrefix(nil, func(k, v []byte) bool {
+			to := r.ring.Lookup(k)
+			if to != from {
+				moves = append(moves, move{
+					key:  append([]byte(nil), k...),
+					val:  append([]byte(nil), v...),
+					from: from,
+					to:   to,
+				})
+			}
+			return true
+		})
+	}
+	for _, m := range moves {
+		if err := r.stores[m.to].Set(m.key, m.val); err != nil {
+			return err
+		}
+		if err := r.stores[m.from].Delete(m.key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Owner is the shard id for key under the current ring.
 func (r *Router) Owner(key []byte) ID {
 	r.mu.RLock()

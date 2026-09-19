@@ -22,6 +22,7 @@ type vnode struct {
 type Ring struct {
 	vnodes []vnode // sorted by h
 	ids    []ID
+	per    int
 }
 
 // NewRing places vnodes virtual nodes per id (default 64).
@@ -56,8 +57,11 @@ func NewRing(ids []ID, vnodes int) (*Ring, error) {
 		}
 		return vs[i].h < vs[j].h
 	})
-	return &Ring{vnodes: vs, ids: clean}, nil
+	return &Ring{vnodes: vs, ids: clean, per: vnodes}, nil
 }
+
+// VNodes is the virtual-node count per physical shard.
+func (r *Ring) VNodes() int { return r.per }
 
 // Lookup returns the shard that owns key.
 func (r *Ring) Lookup(key []byte) ID {
