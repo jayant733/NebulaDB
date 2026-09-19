@@ -22,8 +22,11 @@ type Replica struct {
 
 // Host is one OS process: a replica of every shard plus a local router.
 type Host struct {
+	ID       raft.ID
 	Replicas []*Replica
 	Router   *shard.Router
+	Gate     *raft.Gate
+	rpcLn    net.Listener
 }
 
 // HostConfig starts N Raft groups on this process.
@@ -38,6 +41,7 @@ type HostConfig struct {
 	Heartbeat   time.Duration
 	ElectionMin time.Duration
 	ElectionMax time.Duration
+	Gate        *raft.Gate // optional; created if TCP and nil
 }
 
 // StartHost opens engines and Raft nodes for each shard.
@@ -58,7 +62,11 @@ func StartHost(cfg HostConfig) (*Host, error) {
 	}
 
 	sids := shard.NumericIDs(cfg.Shards)
-	h := &Host{}
+	h := &Host{ID: cfg.ID, Gate: cfg.Gate}
+	if h.Gate == nil {
+		h.Gate = raft.NewGate()
+	}
+	cfg.Gate = h.Gate
 	stores := make(map[shard.ID]storage.KV, cfg.Shards)
 	for i, sid := range sids {
 		rep, err := startReplica(cfg, i, sid)
@@ -98,7 +106,7 @@ func startReplica(cfg HostConfig, i int, sid shard.ID) (*Replica, error) {
 			_ = eng.Close()
 			return nil, err
 		}
-		trans = raft.NewTCP(addrs)
+		trans = raft.NewTCP(addrs).WithGate(cfg.ID, cfg.Gate)
 	}
 	node, err := raft.Start(raft.Config{
 		ID:          cfg.ID,
@@ -145,6 +153,10 @@ func startReplica(cfg HostConfig, i int, sid shard.ID) (*Replica, error) {
 func (h *Host) Close() {
 	if h == nil {
 		return
+	}
+	if h.rpcLn != nil {
+		_ = h.rpcLn.Close()
+		h.rpcLn = nil
 	}
 	for _, r := range h.Replicas {
 		if r == nil {

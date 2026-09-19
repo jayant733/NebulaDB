@@ -25,8 +25,10 @@ func (r *RPC) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) e
 
 // TCP is a Transport over net/rpc.
 type TCP struct {
+	self    ID
 	addrs   map[ID]string
 	timeout time.Duration
+	gate    *Gate
 }
 
 // NewTCP maps node IDs to host:port.
@@ -34,7 +36,17 @@ func NewTCP(addrs map[ID]string) *TCP {
 	return &TCP{addrs: addrs, timeout: 200 * time.Millisecond}
 }
 
+// WithGate drops sends according to gate (from self).
+func (t *TCP) WithGate(self ID, g *Gate) *TCP {
+	t.self = self
+	t.gate = g
+	return t
+}
+
 func (t *TCP) call(to ID, method string, args, reply any) error {
+	if t.gate != nil && t.gate.Blocked(t.self, to) {
+		return errUnreachable
+	}
 	addr, ok := t.addrs[to]
 	if !ok {
 		return errUnreachable

@@ -9,14 +9,17 @@ import (
 type Memory struct {
 	mu    sync.Mutex
 	nodes map[ID]*Node
-	drop  map[ID]bool
+	gate  *Gate
 	delay time.Duration
 }
 
 // NewMemory returns an empty in-memory network.
 func NewMemory() *Memory {
-	return &Memory{nodes: map[ID]*Node{}, drop: map[ID]bool{}}
+	return &Memory{nodes: map[ID]*Node{}, gate: NewGate()}
 }
+
+// Gate is the partition controller for this network.
+func (m *Memory) Gate() *Gate { return m.gate }
 
 // Register adds a node.
 func (m *Memory) Register(n *Node) {
@@ -27,15 +30,7 @@ func (m *Memory) Register(n *Node) {
 
 // Isolate drops all RPCs to/from id (for failover tests).
 func (m *Memory) Isolate(id ID, on bool) {
-	m.mu.Lock()
-	m.drop[id] = on
-	m.mu.Unlock()
-}
-
-func (m *Memory) blocked(to ID) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.drop[to]
+	m.gate.Isolate(id, on)
 }
 
 func (m *Memory) node(to ID) *Node {
@@ -46,7 +41,7 @@ func (m *Memory) node(to ID) *Node {
 
 // SendRequestVote implements Transport.
 func (m *Memory) SendRequestVote(to ID, args RequestVoteArgs) (RequestVoteReply, error) {
-	if m.blocked(to) || m.blocked(args.Candidate) {
+	if m.gate.Blocked(args.Candidate, to) {
 		return RequestVoteReply{}, errUnreachable
 	}
 	n := m.node(to)
@@ -58,7 +53,7 @@ func (m *Memory) SendRequestVote(to ID, args RequestVoteArgs) (RequestVoteReply,
 
 // SendAppendEntries implements Transport.
 func (m *Memory) SendAppendEntries(to ID, args AppendEntriesArgs) (AppendEntriesReply, error) {
-	if m.blocked(to) || m.blocked(args.Leader) {
+	if m.gate.Blocked(args.Leader, to) {
 		return AppendEntriesReply{}, errUnreachable
 	}
 	n := m.node(to)
