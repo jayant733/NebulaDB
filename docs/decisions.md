@@ -34,7 +34,7 @@ A mismatched CRC fails recovery instead of skipping the record. Silent skip can 
 
 **Status:** Accepted
 
-REPL is fine for Phase 1. Cluster internals will use gRPC (Phase 10). HTTP may exist later for `/metrics` and a convenience SQL gateway, not for Raft.
+REPL is fine for Phase 1. HTTP is not used for Raft or client KV. Node-to-node Raft and client KV use **net/rpc over TCP** (see ADR-011). HTTP may exist later for `/metrics` only.
 
 ## ADR-007: Resume bullets only for shipped, measured work
 
