@@ -75,9 +75,9 @@ Query router + consistent hashing over local LSM engines. Rebalance moves keys w
 
 See [docs/phases/phase-07-sharding.md](phases/phase-07-sharding.md).
 
-## Phase 8 — Replicated shards
+## Phase 8 — Replicated shards (in progress)
 
-Each shard is its own Raft group (leader + followers).
+Each shard is its own Raft group (leader + followers). See [docs/phases/phase-08-replicated-shards.md](phases/phase-08-replicated-shards.md).
 
 ## Phase 9 — Failure injection
 

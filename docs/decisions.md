@@ -57,3 +57,13 @@ Sharding by SQL primary key alone would split a row from its secondary-index ent
 Cost: `ScanPrefix` (table scans, index range, catalog backfill) must query every shard and merge. That is acceptable until the planner can push a single-key `Get`.
 
 Replicated shards (one Raft group per shard) stay Phase 8 so Phase 7 can test placement and rebalance on one process.
+
+## ADR-010: Isolated Raft group per shard
+
+**Status:** Accepted (Phase 8)
+
+One Raft log for the whole node would force every shard's writes through a single leader and a single `commitIndex`. Independent groups let shard 1 keep committing if shard 0 is electing.
+
+Peer `--id`s are reused across groups; **transports and listen ports are not**. Mixing groups on one `raft.Memory` or one TCP port would deliver `RequestVote` to the wrong state machine.
+
+Network forwarding from a follower to the shard leader is deferred to Phase 10. Until then, a client write succeeds on a process only when that process leads the hashed shard (tests use `LeaderPick`).
