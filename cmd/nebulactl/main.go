@@ -7,6 +7,6 @@ import (
 )
 
 func main() {
-	fmt.Fprintln(os.Stderr, "nebulactl: no cluster commands until Phase 6+")
+	fmt.Fprintln(os.Stderr, "nebulactl: operator commands are Phase 9+; start a cluster with nebuladb --id --peers")
 	os.Exit(1)
 }

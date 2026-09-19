@@ -23,7 +23,7 @@ func TestREPLSetGetRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &repl{eng: eng, idx: idx, sql: se}
+	r := &repl{eng: eng, kv: eng, idx: idx, sql: se}
 	if err := run(r, "set hello world"); err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestREPLIndexedRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &repl{eng: eng, idx: idx, sql: se}
+	r := &repl{eng: eng, kv: eng, idx: idx, sql: se}
 	if err := run(r, "idxcreate age 0"); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestREPLSQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &repl{eng: eng, idx: idx, sql: se}
+	r := &repl{eng: eng, kv: eng, idx: idx, sql: se}
 	if err := run(r, "CREATE TABLE users (id INT, name TEXT, age INT)"); err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestREPLTxnRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &repl{eng: eng, idx: idx, sql: se}
+	r := &repl{eng: eng, kv: eng, idx: idx, sql: se}
 	if err := run(r, "CREATE TABLE t (id INT, v TEXT)"); err != nil {
 		t.Fatal(err)
 	}

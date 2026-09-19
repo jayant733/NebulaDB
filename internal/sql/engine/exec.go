@@ -23,13 +23,13 @@ type Result struct {
 // Engine executes SQL against an LSM store.
 type Engine struct {
 	mu  sync.Mutex
-	kv  *storage.Engine
+	kv  storage.KV
 	cat *Catalog
 	txn *storage.Txn
 }
 
-// New wraps an opened KV engine.
-func New(kv *storage.Engine) (*Engine, error) {
+// New wraps a KV store (local engine or Raft-replicated).
+func New(kv storage.KV) (*Engine, error) {
 	cat, err := loadCatalog(kv)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (e *Engine) begin(s *ast.Begin) (*Result, error) {
 	if s.Iso == ast.IsoRepeatableRead {
 		iso = storage.RepeatableRead
 	}
-	e.txn = e.kv.Begin(iso)
+	e.txn = storage.BeginOn(e.kv, iso)
 	return &Result{Message: "begin"}, nil
 }
 

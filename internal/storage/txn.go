@@ -30,9 +30,10 @@ type writeOp struct {
 	val []byte
 }
 
-// Txn is a buffered transaction over an Engine.
+// Txn is a buffered transaction over a KV store.
 type Txn struct {
 	e       *Engine
+	kv      KV
 	mu      sync.Mutex
 	iso     Isolation
 	writes  map[string]writeOp
@@ -41,9 +42,9 @@ type Txn struct {
 	done    bool
 }
 
-// Begin starts a transaction.
+// Begin starts a transaction on this engine.
 func (e *Engine) Begin(iso Isolation) *Txn {
-	t := &Txn{e: e, iso: iso, writes: map[string]writeOp{}}
+	t := &Txn{e: e, kv: e, iso: iso, writes: map[string]writeOp{}}
 	if iso == RepeatableRead {
 		e.mu.Lock()
 		t.snapSeq = e.seq
@@ -53,6 +54,22 @@ func (e *Engine) Begin(iso Isolation) *Txn {
 			return true
 		})
 		e.mu.Unlock()
+	}
+	return t
+}
+
+// BeginOn starts a transaction against any KV (used when writes go through Raft).
+func BeginOn(kv KV, iso Isolation) *Txn {
+	if e, ok := kv.(*Engine); ok {
+		return e.Begin(iso)
+	}
+	t := &Txn{kv: kv, iso: iso, writes: map[string]writeOp{}}
+	if iso == RepeatableRead {
+		t.snap = map[string][]byte{}
+		kv.ScanPrefix(nil, func(k, v []byte) bool {
+			t.snap[string(k)] = append([]byte(nil), v...)
+			return true
+		})
 	}
 	return t
 }
@@ -87,7 +104,7 @@ func (t *Txn) Get(key []byte) ([]byte, bool, error) {
 		}
 		return append([]byte(nil), v...), true, nil
 	}
-	return t.e.Get(key)
+	return t.kv.Get(key)
 }
 
 // Set implements KV.
@@ -133,7 +150,7 @@ func (t *Txn) ScanPrefix(prefix []byte, fn func(key, value []byte) bool) {
 			}
 		}
 	} else {
-		t.e.ScanPrefix(prefix, func(k, v []byte) bool {
+		t.kv.ScanPrefix(prefix, func(k, v []byte) bool {
 			latest[string(k)] = append([]byte(nil), v...)
 			return true
 		})
@@ -168,15 +185,37 @@ func (t *Txn) Commit() error {
 	if err := t.check(); err != nil {
 		return err
 	}
-	t.e.mu.Lock()
-	defer t.e.mu.Unlock()
-	if t.iso == RepeatableRead {
-		for k := range t.writes {
-			if t.e.versions[k] > t.snapSeq {
-				t.done = true
-				return ErrConflict
+	if t.e != nil {
+		t.e.mu.Lock()
+		defer t.e.mu.Unlock()
+		if t.iso == RepeatableRead {
+			for k := range t.writes {
+				if t.e.versions[k] > t.snapSeq {
+					t.done = true
+					return ErrConflict
+				}
 			}
 		}
+		keys := make([]string, 0, len(t.writes))
+		for k := range t.writes {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			w := t.writes[k]
+			var err error
+			if w.del {
+				err = t.e.deleteLocked([]byte(k))
+			} else {
+				err = t.e.setLocked([]byte(k), w.val)
+			}
+			if err != nil {
+				t.done = true
+				return err
+			}
+		}
+		t.done = true
+		return nil
 	}
 	keys := make([]string, 0, len(t.writes))
 	for k := range t.writes {
@@ -187,9 +226,9 @@ func (t *Txn) Commit() error {
 		w := t.writes[k]
 		var err error
 		if w.del {
-			err = t.e.deleteLocked([]byte(k))
+			err = t.kv.Delete([]byte(k))
 		} else {
-			err = t.e.setLocked([]byte(k), w.val)
+			err = t.kv.Set([]byte(k), w.val)
 		}
 		if err != nil {
 			t.done = true

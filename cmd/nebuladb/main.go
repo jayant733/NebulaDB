@@ -10,7 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jayant/nebuladb/internal/cluster"
 	"github.com/jayant/nebuladb/internal/index"
+	"github.com/jayant/nebuladb/internal/raft"
 	"github.com/jayant/nebuladb/internal/sql/engine"
 	"github.com/jayant/nebuladb/internal/storage"
 )
@@ -18,14 +20,19 @@ import (
 var errQuit = errors.New("quit")
 
 type repl struct {
-	eng *storage.Engine
-	idx *index.Store
-	sql *engine.Engine
+	eng  *storage.Engine
+	kv   storage.KV
+	idx  *index.Store
+	sql  *engine.Engine
+	node *raft.Node
+	id   string
 }
 
 func main() {
 	data := flag.String("data", "./data", "data directory (WAL lives here)")
 	nosync := flag.Bool("no-sync", false, "disable fsync (not crash-safe; for experiments)")
+	id := flag.String("id", "", "raft node id (cluster mode)")
+	peers := flag.String("peers", "", "raft peers id=host:port,...")
 	flag.Parse()
 
 	sync := storage.SyncAlways
@@ -38,17 +45,55 @@ func main() {
 		fatalf("open: %v", err)
 	}
 	defer eng.Close()
-	idx, err := index.Wrap(eng)
+
+	var (
+		kv   storage.KV = eng
+		node *raft.Node
+	)
+	if strings.TrimSpace(*peers) != "" {
+		if *id == "" {
+			fatalf("--id is required with --peers")
+		}
+		addrs, ids, err := cluster.ParsePeers(*peers)
+		if err != nil {
+			fatalf("%v", err)
+		}
+		addr, ok := addrs[raft.ID(*id)]
+		if !ok {
+			fatalf("peers must include this --id")
+		}
+		trans := raft.NewTCP(addrs)
+		node, err = raft.Start(raft.Config{
+			ID:        raft.ID(*id),
+			Peers:     ids,
+			Dir:       *data + "/raft",
+			Transport: trans,
+			Apply:     cluster.Apply(eng),
+		})
+		if err != nil {
+			fatalf("raft: %v", err)
+		}
+		defer node.Stop()
+		ln, err := raft.ListenAndServe(node, addr)
+		if err != nil {
+			fatalf("raft listen: %v", err)
+		}
+		defer ln.Close()
+		kv = &cluster.Replicated{Node: node, Local: eng}
+		fmt.Fprintf(os.Stderr, "raft listening on %s id=%s\n", addr, *id)
+	}
+
+	idx, err := index.Wrap(kv)
 	if err != nil {
 		fatalf("index catalog: %v", err)
 	}
-	sqleng, err := engine.New(eng)
+	sqleng, err := engine.New(kv)
 	if err != nil {
 		fatalf("sql: %v", err)
 	}
-	r := &repl{eng: eng, idx: idx, sql: sqleng}
+	r := &repl{eng: eng, kv: kv, idx: idx, sql: sqleng, node: node, id: *id}
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 5 — SQL + txns  data=%s  sync=%v\n", *data, !*nosync)
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 6 — Raft  data=%s  sync=%v\n", *data, !*nosync)
 	fmt.Fprintln(os.Stderr, "SQL: CREATE/INSERT/SELECT/UPDATE/DELETE | BEGIN/COMMIT/ROLLBACK")
 	fmt.Fprintln(os.Stderr, "KV:  set | get | del | flush | help | exit")
 
@@ -102,6 +147,9 @@ func run(r *repl, line string) error {
 		s := eng.Stats()
 		fmt.Printf("dir=%s live_keys=%d approx_bytes=%d sstables=%d wal_bytes=%d bloom_checked=%d bloom_negative=%d indexes=%d\n",
 			s.Dir, s.LiveKeys, s.ApproxSize, s.SSTables, s.WALBytes, s.BloomChecked, s.BloomNegatives, len(r.idx.Indexes()))
+		if r.node != nil {
+			fmt.Printf("raft id=%s leader=%s is_leader=%v\n", r.id, r.node.LeaderID(), r.node.IsLeader())
+		}
 		return nil
 	case "scan":
 		n := 0
@@ -116,7 +164,7 @@ func run(r *repl, line string) error {
 		if rest == "" {
 			return fmt.Errorf("usage: get <key>")
 		}
-		v, ok, err := eng.Get([]byte(rest))
+		v, ok, err := r.kv.Get([]byte(rest))
 		if err != nil {
 			return err
 		}
@@ -135,13 +183,13 @@ func run(r *repl, line string) error {
 		if rest == "" {
 			return fmt.Errorf("usage: del <key>")
 		}
-		return eng.Delete([]byte(rest))
+		return r.kv.Delete([]byte(rest))
 	case "set":
 		key, val, ok := strings.Cut(rest, " ")
 		if !ok || key == "" {
 			return fmt.Errorf("usage: set <key> <value>")
 		}
-		return eng.Set([]byte(key), []byte(strings.TrimSpace(val)))
+		return r.kv.Set([]byte(key), []byte(strings.TrimSpace(val)))
 	case "row":
 		parts := strings.Fields(rest)
 		if len(parts) < 2 {

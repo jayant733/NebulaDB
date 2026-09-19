@@ -26,13 +26,13 @@ type Table struct {
 // Catalog is the on-disk table list.
 type Catalog struct {
 	mu     sync.Mutex
-	eng    *storage.Engine
+	kv    storage.KV
 	tables map[string]*Table
 }
 
-func loadCatalog(eng *storage.Engine) (*Catalog, error) {
-	c := &Catalog{eng: eng, tables: map[string]*Table{}}
-	raw, ok, err := eng.Get(schemaKey)
+func loadCatalog(kv storage.KV) (*Catalog, error) {
+	c := &Catalog{kv: kv, tables: map[string]*Table{}}
+	raw, ok, err := kv.Get(schemaKey)
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +50,26 @@ func loadCatalog(eng *storage.Engine) (*Catalog, error) {
 	return c, nil
 }
 
+func (c *Catalog) refreshLocked() {
+	raw, ok, err := c.kv.Get(schemaKey)
+	if err != nil || !ok {
+		return
+	}
+	tabs, err := decodeSchema(raw)
+	if err != nil {
+		return
+	}
+	c.tables = map[string]*Table{}
+	for _, t := range tabs {
+		tt := t
+		c.tables[t.Name] = &tt
+	}
+}
+
 func (c *Catalog) list() []*Table {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.refreshLocked()
 	out := make([]*Table, 0, len(c.tables))
 	for _, t := range c.tables {
 		out = append(out, t)
@@ -63,6 +80,7 @@ func (c *Catalog) list() []*Table {
 func (c *Catalog) get(name string) (*Table, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.refreshLocked()
 	t, ok := c.tables[name]
 	if !ok {
 		return nil, fmt.Errorf("sql: table %q does not exist", name)
@@ -73,6 +91,7 @@ func (c *Catalog) get(name string) (*Table, error) {
 func (c *Catalog) create(t *Table) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.refreshLocked()
 	if _, ok := c.tables[t.Name]; ok {
 		return fmt.Errorf("sql: table %q already exists", t.Name)
 	}
@@ -85,7 +104,7 @@ func (c *Catalog) persist() error {
 	for _, t := range c.tables {
 		tabs = append(tabs, *t)
 	}
-	return c.eng.Set(schemaKey, encodeSchema(tabs))
+	return c.kv.Set(schemaKey, encodeSchema(tabs))
 }
 
 func (c *Catalog) col(table, col string) (int, ast.Type, error) {
