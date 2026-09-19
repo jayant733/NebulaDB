@@ -84,6 +84,9 @@ func main() {
 		kv = h.Router
 		eng = engs[0]
 		fmt.Fprintf(os.Stderr, "raft-per-shard id=%s shards=%d\n", *id, *nshards)
+		if rpcAddr, err := cluster.OffsetAddr(addrs[raft.ID(*id)], *nshards); err == nil {
+			fmt.Fprintf(os.Stderr, "client/admin rpc %s\n", rpcAddr)
+		}
 	} else if *nshards > 1 {
 		var rt *shard.Router
 		rt, engs, err = shard.OpenLocal(*data, *nshards, sync)

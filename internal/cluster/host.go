@@ -27,6 +27,8 @@ type Host struct {
 	Router   *shard.Router
 	Gate     *raft.Gate
 	rpcLn    net.Listener
+	rpcPeers map[raft.ID]string
+	sem      chan struct{}
 }
 
 // HostConfig starts N Raft groups on this process.
@@ -62,7 +64,7 @@ func StartHost(cfg HostConfig) (*Host, error) {
 	}
 
 	sids := shard.NumericIDs(cfg.Shards)
-	h := &Host{ID: cfg.ID, Gate: cfg.Gate}
+	h := &Host{ID: cfg.ID, Gate: cfg.Gate, sem: make(chan struct{}, 32)}
 	if h.Gate == nil {
 		h.Gate = raft.NewGate()
 	}
@@ -88,6 +90,28 @@ func StartHost(cfg HostConfig) (*Host, error) {
 		return nil, err
 	}
 	h.Router = rt
+	if cfg.Transports == nil {
+		rpcAddr, err := OffsetAddr(cfg.Addrs[cfg.ID], cfg.Shards)
+		if err != nil {
+			h.Close()
+			return nil, err
+		}
+		peers, err := OffsetAddrs(cfg.Addrs, cfg.Shards)
+		if err != nil {
+			h.Close()
+			return nil, err
+		}
+		ln, err := net.Listen("tcp", rpcAddr)
+		if err != nil {
+			h.Close()
+			return nil, err
+		}
+		if err := h.ServeKV(ln, peers); err != nil {
+			_ = ln.Close()
+			h.Close()
+			return nil, err
+		}
+	}
 	return h, nil
 }
 
