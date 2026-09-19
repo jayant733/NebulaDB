@@ -59,9 +59,9 @@ See [docs/phases/phase-04-sql.md](phases/phase-04-sql.md).
 
 Subset: `CREATE TABLE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`, `WHERE`, `ORDER BY`, `LIMIT`, `CREATE INDEX`. Aggregates and `JOIN` are still out of scope.
 
-## Phase 5 — Transactions
+## Phase 5 — Transactions (in progress)
 
-`BEGIN` / `COMMIT` / `ROLLBACK`. Start with **Read Committed**, then Repeatable Read. Isolation tests with concurrent writers.
+`BEGIN` / `COMMIT` / `ROLLBACK`. Default **Read Committed**; optional **Repeatable Read**. See [docs/phases/phase-05-transactions.md](phases/phase-05-transactions.md).
 
 ## Phase 6 — Raft
 

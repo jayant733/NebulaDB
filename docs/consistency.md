@@ -28,13 +28,21 @@ None. There is one copy of the log on local disk.
 
 ---
 
-## Intended model (Phase 5+)
+## Phase 5 (single process, transactions)
 
-| Layer | Intent |
-|-------|--------|
-| Single-key reads/writes after Raft commit | Linearizable |
-| SQL transactions | Start Read Committed; optional Repeatable Read |
-| Cross-shard transactions | Not in v1; document as out of scope until a 2PC/Percolator-style design exists |
+### Isolation
+
+| Level | Behavior |
+|-------|----------|
+| Read Committed (default) | No dirty reads. Each statement sees the latest **committed** data plus the session's own writes. |
+| Repeatable Read | Snapshot at `BEGIN`. Concurrent commits are invisible. `COMMIT` aborts on write-write conflict (`ErrConflict`). |
+
+DDL is auto-commit only (not allowed inside an open transaction).
+
+### Atomicity
+
+A SQL transaction's writes are buffered until `COMMIT`. Other sessions do not see them. Crash mid-commit may persist a prefix of WAL records (see phase-05).
+
 
 ## Intended model (Phase 6+ Raft)
 
