@@ -147,3 +147,10 @@ func (r *Router) ScanPrefix(prefix []byte, fn func(key, value []byte) bool) {
 		}
 	}
 }
+
+// ShardIDs is current membership.
+func (r *Router) ShardIDs() []ID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.ring.IDs()
+}

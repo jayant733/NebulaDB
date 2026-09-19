@@ -13,6 +13,7 @@ import (
 	"github.com/jayant/nebuladb/internal/cluster"
 	"github.com/jayant/nebuladb/internal/index"
 	"github.com/jayant/nebuladb/internal/raft"
+	"github.com/jayant/nebuladb/internal/shard"
 	"github.com/jayant/nebuladb/internal/sql/engine"
 	"github.com/jayant/nebuladb/internal/storage"
 )
@@ -21,6 +22,7 @@ var errQuit = errors.New("quit")
 
 type repl struct {
 	eng  *storage.Engine
+	engs []*storage.Engine
 	kv   storage.KV
 	idx  *index.Store
 	sql  *engine.Engine
@@ -33,54 +35,81 @@ func main() {
 	nosync := flag.Bool("no-sync", false, "disable fsync (not crash-safe; for experiments)")
 	id := flag.String("id", "", "raft node id (cluster mode)")
 	peers := flag.String("peers", "", "raft peers id=host:port,...")
+	nshards := flag.Int("shards", 1, "local shard count (Phase 7; not with --peers)")
 	flag.Parse()
+
+	if *nshards < 1 {
+		fatalf("--shards must be >= 1")
+	}
+	if *nshards > 1 && strings.TrimSpace(*peers) != "" {
+		fatalf("--shards and --peers cannot be combined (replicated shards are Phase 8)")
+	}
 
 	sync := storage.SyncAlways
 	if *nosync {
 		sync = storage.SyncNone
 	}
 
-	eng, err := storage.Open(storage.Options{Dir: *data, Sync: sync})
-	if err != nil {
-		fatalf("open: %v", err)
-	}
-	defer eng.Close()
-
 	var (
-		kv   storage.KV = eng
+		eng  *storage.Engine
+		engs []*storage.Engine
+		kv   storage.KV
 		node *raft.Node
+		err  error
 	)
-	if strings.TrimSpace(*peers) != "" {
-		if *id == "" {
-			fatalf("--id is required with --peers")
-		}
-		addrs, ids, err := cluster.ParsePeers(*peers)
+	if *nshards > 1 {
+		var rt *shard.Router
+		rt, engs, err = shard.OpenLocal(*data, *nshards, sync)
 		if err != nil {
-			fatalf("%v", err)
+			fatalf("shards: %v", err)
 		}
-		addr, ok := addrs[raft.ID(*id)]
-		if !ok {
-			fatalf("peers must include this --id")
-		}
-		trans := raft.NewTCP(addrs)
-		node, err = raft.Start(raft.Config{
-			ID:        raft.ID(*id),
-			Peers:     ids,
-			Dir:       *data + "/raft",
-			Transport: trans,
-			Apply:     cluster.Apply(eng),
-		})
+		defer func() {
+			for _, e := range engs {
+				_ = e.Close()
+			}
+		}()
+		kv = rt
+		eng = engs[0]
+	} else {
+		eng, err = storage.Open(storage.Options{Dir: *data, Sync: sync})
 		if err != nil {
-			fatalf("raft: %v", err)
+			fatalf("open: %v", err)
 		}
-		defer node.Stop()
-		ln, err := raft.ListenAndServe(node, addr)
-		if err != nil {
-			fatalf("raft listen: %v", err)
+		defer eng.Close()
+		engs = []*storage.Engine{eng}
+		kv = eng
+		if strings.TrimSpace(*peers) != "" {
+			if *id == "" {
+				fatalf("--id is required with --peers")
+			}
+			addrs, ids, err := cluster.ParsePeers(*peers)
+			if err != nil {
+				fatalf("%v", err)
+			}
+			addr, ok := addrs[raft.ID(*id)]
+			if !ok {
+				fatalf("peers must include this --id")
+			}
+			trans := raft.NewTCP(addrs)
+			node, err = raft.Start(raft.Config{
+				ID:        raft.ID(*id),
+				Peers:     ids,
+				Dir:       *data + "/raft",
+				Transport: trans,
+				Apply:     cluster.Apply(eng),
+			})
+			if err != nil {
+				fatalf("raft: %v", err)
+			}
+			defer node.Stop()
+			ln, err := raft.ListenAndServe(node, addr)
+			if err != nil {
+				fatalf("raft listen: %v", err)
+			}
+			defer ln.Close()
+			kv = &cluster.Replicated{Node: node, Local: eng}
+			fmt.Fprintf(os.Stderr, "raft listening on %s id=%s\n", addr, *id)
 		}
-		defer ln.Close()
-		kv = &cluster.Replicated{Node: node, Local: eng}
-		fmt.Fprintf(os.Stderr, "raft listening on %s id=%s\n", addr, *id)
 	}
 
 	idx, err := index.Wrap(kv)
@@ -91,9 +120,9 @@ func main() {
 	if err != nil {
 		fatalf("sql: %v", err)
 	}
-	r := &repl{eng: eng, kv: kv, idx: idx, sql: sqleng, node: node, id: *id}
+	r := &repl{eng: eng, engs: engs, kv: kv, idx: idx, sql: sqleng, node: node, id: *id}
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 6 — Raft  data=%s  sync=%v\n", *data, !*nosync)
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 7 — shards=%d  data=%s  sync=%v\n", *nshards, *data, !*nosync)
 	fmt.Fprintln(os.Stderr, "SQL: CREATE/INSERT/SELECT/UPDATE/DELETE | BEGIN/COMMIT/ROLLBACK")
 	fmt.Fprintln(os.Stderr, "KV:  set | get | del | flush | help | exit")
 
@@ -124,7 +153,6 @@ func run(r *repl, line string) error {
 	cmd, rest, _ := strings.Cut(line, " ")
 	cmd = strings.ToLower(cmd)
 	rest = strings.TrimSpace(rest)
-	eng := r.eng
 
 	switch cmd {
 	case "help", "?":
@@ -140,20 +168,38 @@ func run(r *repl, line string) error {
 	case "exit", "quit":
 		return errQuit
 	case "flush":
-		return eng.Flush()
+		return eachEngine(r, func(e *storage.Engine) error { return e.Flush() })
 	case "compact":
-		return eng.Compact()
+		return eachEngine(r, func(e *storage.Engine) error { return e.Compact() })
 	case "stats":
-		s := eng.Stats()
-		fmt.Printf("dir=%s live_keys=%d approx_bytes=%d sstables=%d wal_bytes=%d bloom_checked=%d bloom_negative=%d indexes=%d\n",
-			s.Dir, s.LiveKeys, s.ApproxSize, s.SSTables, s.WALBytes, s.BloomChecked, s.BloomNegatives, len(r.idx.Indexes()))
+		var (
+			live        int
+			approx, wal int64
+			sst         int
+			bc, bn      uint64
+		)
+		dir := ""
+		for _, e := range r.engs {
+			s := e.Stats()
+			if dir == "" {
+				dir = s.Dir
+			}
+			live += s.LiveKeys
+			approx += s.ApproxSize
+			sst += s.SSTables
+			wal += s.WALBytes
+			bc += s.BloomChecked
+			bn += s.BloomNegatives
+		}
+		fmt.Printf("dir=%s shards=%d live_keys=%d approx_bytes=%d sstables=%d wal_bytes=%d bloom_checked=%d bloom_negative=%d indexes=%d\n",
+			dir, len(r.engs), live, approx, sst, wal, bc, bn, len(r.idx.Indexes()))
 		if r.node != nil {
 			fmt.Printf("raft id=%s leader=%s is_leader=%v\n", r.id, r.node.LeaderID(), r.node.IsLeader())
 		}
 		return nil
 	case "scan":
 		n := 0
-		eng.Scan(func(k, v []byte) bool {
+		r.kv.ScanPrefix(nil, func(k, v []byte) bool {
 			fmt.Printf("%s\t%s\n", k, v)
 			n++
 			return true
@@ -301,6 +347,15 @@ func printPKs(pks [][]byte) {
 	for _, pk := range pks {
 		fmt.Println(string(pk))
 	}
+}
+
+func eachEngine(r *repl, fn func(*storage.Engine) error) error {
+	for _, e := range r.engs {
+		if err := fn(e); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func fatalf(format string, args ...any) {
