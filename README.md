@@ -32,15 +32,13 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 4 — SQL Engine** is current: focused SQL over the LSM store. Transactions and Raft are later.
+**Phase 5 — Transactions** is current: `BEGIN` / `COMMIT` / `ROLLBACK` with Read Committed (default) and Repeatable Read.
 
 | Capability | Status |
 |------------|--------|
-| KV `Set` / `Get` / `Delete` | Implemented |
-| WAL, MemTable, SSTables, Bloom, compaction | Implemented |
-| Secondary indexes + B+ tree | Implemented |
-| SQL (CREATE/INSERT/SELECT/UPDATE/DELETE) | Implemented |
-| Transactions | Phase 5 |
+| KV, WAL, LSM, indexes | Implemented |
+| SQL subset | Implemented |
+| Transactions + isolation | Implemented |
 | Raft cluster | Phase 6 |
 
 Do not claim distributed SQL, Raft, or Kubernetes until those phases exist and are tested.
@@ -60,11 +58,10 @@ Interactive commands:
 
 ```
 CREATE TABLE users (id INT, name TEXT, age INT);
+BEGIN;
 INSERT INTO users VALUES (1, 'Jayant', 20);
-SELECT * FROM users WHERE age >= 18 ORDER BY name;
-CREATE INDEX idx_users_age ON users (age);
-UPDATE users SET age = 21 WHERE id = 1;
-DELETE FROM users WHERE id = 1;
+COMMIT;
+SELECT * FROM users;
 ```
 
 Restart with the same `--data` directory after a crash. Mutations are durable once the WAL append has been synced.

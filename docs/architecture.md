@@ -1,15 +1,14 @@
 # Architecture
 
-## What exists today (Phase 4)
+## What exists today (Phase 5)
 
 ```
   REPL
-    ├── SQL engine (lexer → parser → planner → executor)
-    └── raw KV commands
+    └── SQL engine  (+ BEGIN/COMMIT/ROLLBACK per session)
             │
-     index.Store (per table)
+     index.Store over Engine or Txn
             │
-     storage.Engine (WAL + MemTable + SSTables)
+     storage.Engine / Txn write buffer
 ```
 
 - The **WAL is the source of truth** on disk.

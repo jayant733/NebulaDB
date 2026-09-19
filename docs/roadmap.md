@@ -59,7 +59,7 @@ See [docs/phases/phase-04-sql.md](phases/phase-04-sql.md).
 
 Subset: `CREATE TABLE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`, `WHERE`, `ORDER BY`, `LIMIT`, `CREATE INDEX`. Aggregates and `JOIN` are still out of scope.
 
-## Phase 5 — Transactions (in progress)
+## Phase 5 — Transactions (done)
 
 `BEGIN` / `COMMIT` / `ROLLBACK`. Default **Read Committed**; optional **Repeatable Read**. See [docs/phases/phase-05-transactions.md](phases/phase-05-transactions.md).
 
