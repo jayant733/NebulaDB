@@ -32,16 +32,17 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 5 — Transactions** is current: `BEGIN` / `COMMIT` / `ROLLBACK` with Read Committed (default) and Repeatable Read.
+**Phase 6 — Raft** is current: leader election, log replication, majority commit, and failover. SQL and KV writes succeed only on the leader.
 
 | Capability | Status |
 |------------|--------|
 | KV, WAL, LSM, indexes | Implemented |
 | SQL subset | Implemented |
 | Transactions + isolation | Implemented |
-| Raft cluster | Phase 6 |
+| Raft cluster | Implemented |
+| Sharding / K8s | Later phases |
 
-Do not claim distributed SQL, Raft, or Kubernetes until those phases exist and are tested.
+Do not claim sharded SQL or Kubernetes until those phases exist and are tested.
 
 ## Quick start
 
@@ -52,6 +53,14 @@ go test ./...
 go test -race ./...
 
 go run ./cmd/nebuladb --data ./data
+```
+
+Three-node cluster (three terminals; write on the leader):
+
+```bash
+go run ./cmd/nebuladb --data ./d1 --id n1 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
+go run ./cmd/nebuladb --data ./d2 --id n2 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
+go run ./cmd/nebuladb --data ./d3 --id n3 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
 ```
 
 Interactive commands:

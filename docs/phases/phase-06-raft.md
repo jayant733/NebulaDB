@@ -10,15 +10,26 @@ In-tree Raft (ADR-003). Writes succeed only on the **leader** after a **majority
 | 6.3 | Propose/apply + failover tests | `feat(raft): commit and apply` |
 | 6.4 | TCP RPC transport | `feat(raft): TCP transport` |
 | 6.5 | Cluster-mode `nebuladb` | `feat(cmd): Raft cluster` |
+| 6.6 | Status docs | `docs: Phase 6 complete` |
 
 ## Definition of done
 
-- Three-node cluster elects one leader
-- `Propose` on the leader commits after majority `AppendEntries` success
-- Followers apply the same log in order
-- Killing the leader triggers a new election; a new `Propose` succeeds
-- Followers reject client writes (`ErrNotLeader`)
-- Persistent `currentTerm`, `votedFor`, and log survive process restart
+- [x] Three-node cluster elects one leader
+- [x] `Propose` on the leader commits after majority `AppendEntries` success
+- [x] Followers apply the same log in order
+- [x] Killing the leader triggers a new election; a new `Propose` succeeds
+- [x] Followers reject client writes (`ErrNotLeader`)
+- [x] Persistent `currentTerm`, `votedFor`, and log survive process restart
+
+## Cluster mode
+
+```
+go run ./cmd/nebuladb --data ./d1 --id n1 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
+go run ./cmd/nebuladb --data ./d2 --id n2 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
+go run ./cmd/nebuladb --data ./d3 --id n3 --peers n1=127.0.0.1:7001,n2=127.0.0.1:7002,n3=127.0.0.1:7003
+```
+
+Issue writes on the leader (`stats` prints `is_leader=true`). Followers return `raft: not leader`. Each node has its own `--data` directory.
 
 ## RPCs
 

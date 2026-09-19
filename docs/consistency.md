@@ -44,14 +44,11 @@ DDL is auto-commit only (not allowed inside an open transaction).
 A SQL transaction's writes are buffered until `COMMIT`. Other sessions do not see them. Crash mid-commit may persist a prefix of WAL records (see phase-05).
 
 
-## Intended model (Phase 6+ Raft)
+## Phase 6 (Raft, as implemented)
 
-- Writes succeed only on the **leader** after **majority** log replication.
-- Followers never acknowledge a write to clients.
-- On leader failure, a new leader is elected; committed entries are not lost (Raft).
-- Uncommitted entries on a deposed leader may be overwritten — clients must retry.
+Writes succeed only on the **leader** after **majority** log replication. Followers return `ErrNotLeader`. After leader failure a new leader is elected; committed entries are not overwritten. Uncommitted entries on a deposed leader may be replaced.
 
-Network partitions: a minority including an old leader cannot commit. This will be chaos-tested in Phase 9.
+Network partitions and split-brain tests are Phase 9.
 
 ## What we will not claim until tested
 

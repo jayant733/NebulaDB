@@ -1,21 +1,21 @@
 # Architecture
 
-## What exists today (Phase 5)
+## What exists today (Phase 6)
 
 ```
-  REPL
-    └── SQL engine  (+ BEGIN/COMMIT/ROLLBACK per session)
-            │
-     index.Store over Engine or Txn
-            │
-     storage.Engine / Txn write buffer
+  REPL / SQL  (writes on leader only)
+       │
+  cluster.Replicated  →  Raft Propose
+       │
+  apply log  →  storage.Engine (WAL + MemTable + SSTables)
 ```
 
-- The **WAL is the source of truth** on disk.
+- The **WAL is the source of truth** on each node's disk.
+- **Raft** replicates `Set`/`Delete` commands; apply writes the local LSM.
 - Recent mutations live in the **MemTable**; older data lives in **SSTables**.
-- The **WAL** records unflushed mutations. After flush, the WAL is rotated.
+- After flush, the WAL is rotated. Raft state lives under `<data>/raft/`.
 - On `Open`, the engine loads MANIFEST SSTables, then replays the WAL.
-- There is no network, no SQL, and no replication.
+- Single-process mode (no `--peers`) is still a local Engine with no Raft.
 
 ## Target architecture (later phases)
 
@@ -54,7 +54,7 @@ One OS process. One data directory:
   sst/000001.sst
 ```
 
-Later: leveled compaction, `raft/` for consensus logs (the Raft log may *be* the WAL, or sit beside it — see ADRs when Phase 6 starts).
+Raft persistent state is `<data>/raft/state.gob` (term, vote, log). The LSM WAL is still the local apply log, not the Raft log.
 
 ## Write path (Phase 1)
 
@@ -87,4 +87,4 @@ Apply-after-log is required so a crash after fsync never loses a committed write
 | Disk full | Append returns error; MemTable is not updated |
 | Bit flip in a record | CRC mismatch; recovery stops at that record (strict) |
 
-Network partitions and split-brain are Phase 6+ concerns.
+Network partitions and split-brain tests are Phase 9. Phase 6 elects a leader and replicates on a static peer list.

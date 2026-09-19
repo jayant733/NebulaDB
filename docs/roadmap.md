@@ -63,7 +63,7 @@ Subset: `CREATE TABLE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`, `WHERE`, `ORDER 
 
 `BEGIN` / `COMMIT` / `ROLLBACK`. Default **Read Committed**; optional **Repeatable Read**. See [docs/phases/phase-05-transactions.md](phases/phase-05-transactions.md).
 
-## Phase 6 — Raft (in progress)
+## Phase 6 — Raft (done)
 
 Three-node cluster, leader election, replicated log, majority commit, failover. Writes go only to the leader.
 
