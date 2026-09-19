@@ -60,6 +60,20 @@ func TestParseCreateInsertSelect(t *testing.T) {
 	if s.(*ast.Delete).Where.Col != "id" {
 		t.Fatal("delete")
 	}
+
+	s, err = Parse(`BEGIN REPEATABLE READ`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.(*ast.Begin).Iso != ast.IsoRepeatableRead {
+		t.Fatal("begin iso")
+	}
+	if _, err := Parse(`COMMIT`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Parse(`ROLLBACK TRANSACTION`); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestParseSelectStar(t *testing.T) {

@@ -49,6 +49,13 @@ const (
 	KwAnd
 	KwInt
 	KwText
+	KwBegin
+	KwCommit
+	KwRollback
+	KwTransaction
+	KwRead
+	KwCommitted
+	KwRepeatable
 )
 
 var keywords = map[string]Kind{
@@ -71,8 +78,15 @@ var keywords = map[string]Kind{
 	"ASC":    KwAsc,
 	"DESC":   KwDesc,
 	"AND":    KwAnd,
-	"INT":    KwInt,
-	"TEXT":   KwText,
+	"INT":         KwInt,
+	"TEXT":        KwText,
+	"BEGIN":       KwBegin,
+	"COMMIT":      KwCommit,
+	"ROLLBACK":    KwRollback,
+	"TRANSACTION": KwTransaction,
+	"READ":        KwRead,
+	"COMMITTED":   KwCommitted,
+	"REPEATABLE":  KwRepeatable,
 }
 
 // Token is one lexeme.

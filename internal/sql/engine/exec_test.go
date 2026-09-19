@@ -105,6 +105,68 @@ func TestDuplicatePK(t *testing.T) {
 	}
 }
 
+func TestSQLTransactionIsolation(t *testing.T) {
+	kv, err := storage.Open(storage.Options{Dir: t.TempDir(), Sync: storage.SyncAlways})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer kv.Close()
+	a, err := New(kv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustExec(t, a, `CREATE TABLE t (id INT, v TEXT)`)
+	mustExec(t, a, `INSERT INTO t VALUES (1, 'base')`)
+	b, err := New(kv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mustExec(t, a, `BEGIN`)
+	mustExec(t, a, `UPDATE t SET v = 'dirty' WHERE id = 1`)
+	r, err := b.Exec(`SELECT v FROM t WHERE id = 1`)
+	if err != nil || r.Rows[0][0] != "base" {
+		t.Fatalf("dirty read %+v %v", r, err)
+	}
+	mustExec(t, a, `COMMIT`)
+	r, err = b.Exec(`SELECT v FROM t WHERE id = 1`)
+	if err != nil || r.Rows[0][0] != "dirty" {
+		t.Fatalf("after commit %+v %v", r, err)
+	}
+
+	mustExec(t, a, `BEGIN`)
+	mustExec(t, a, `INSERT INTO t VALUES (2, 'gone')`)
+	mustExec(t, a, `ROLLBACK`)
+	r, err = a.Exec(`SELECT * FROM t WHERE id = 2`)
+	if err != nil || len(r.Rows) != 0 {
+		t.Fatalf("rollback %+v %v", r, err)
+	}
+}
+
+func TestSQLRepeatableRead(t *testing.T) {
+	kv, err := storage.Open(storage.Options{Dir: t.TempDir(), Sync: storage.SyncAlways})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer kv.Close()
+	a, _ := New(kv)
+	mustExec(t, a, `CREATE TABLE t (id INT, v TEXT)`)
+	mustExec(t, a, `INSERT INTO t VALUES (1, 'v1')`)
+	b, _ := New(kv)
+	mustExec(t, a, `BEGIN REPEATABLE READ`)
+	mustExec(t, b, `UPDATE t SET v = 'v2' WHERE id = 1`)
+	r, err := a.Exec(`SELECT v FROM t WHERE id = 1`)
+	if err != nil || r.Rows[0][0] != "v1" {
+		t.Fatalf("RR %+v %v", r, err)
+	}
+	if _, err := a.Exec(`UPDATE t SET v = 'a' WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Exec(`COMMIT`); err == nil {
+		t.Fatal("expected write-write conflict")
+	}
+}
+
 func mustExec(t *testing.T, e *Engine, q string) {
 	t.Helper()
 	if _, err := e.Exec(q); err != nil {

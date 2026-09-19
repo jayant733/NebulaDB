@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/jayant/nebuladb/internal/index"
 	"github.com/jayant/nebuladb/internal/row"
@@ -21,8 +22,10 @@ type Result struct {
 
 // Engine executes SQL against an LSM store.
 type Engine struct {
+	mu  sync.Mutex
 	kv  *storage.Engine
 	cat *Catalog
+	txn *storage.Txn
 }
 
 // New wraps an opened KV engine.
@@ -53,19 +56,85 @@ func (e *Engine) Exec(src string) (*Result, error) {
 		return e.update(s)
 	case *ast.Delete:
 		return e.delete(s)
+	case *ast.Begin:
+		return e.begin(s)
+	case *ast.Commit:
+		return e.commit()
+	case *ast.Rollback:
+		return e.rollback()
 	default:
 		return nil, fmt.Errorf("sql: unsupported statement")
 	}
+}
+
+func (e *Engine) dataKV() storage.KV {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.txn != nil {
+		return e.txn
+	}
+	return e.kv
+}
+
+func (e *Engine) inTxn() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.txn != nil
+}
+
+func (e *Engine) begin(s *ast.Begin) (*Result, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.txn != nil {
+		return nil, fmt.Errorf("sql: transaction already open")
+	}
+	iso := storage.ReadCommitted
+	if s.Iso == ast.IsoRepeatableRead {
+		iso = storage.RepeatableRead
+	}
+	e.txn = e.kv.Begin(iso)
+	return &Result{Message: "begin"}, nil
+}
+
+func (e *Engine) commit() (*Result, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.txn == nil {
+		return nil, fmt.Errorf("sql: no transaction")
+	}
+	err := e.txn.Commit()
+	e.txn = nil
+	if err != nil {
+		return nil, err
+	}
+	return &Result{Message: "commit"}, nil
+}
+
+func (e *Engine) rollback() (*Result, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.txn == nil {
+		return nil, fmt.Errorf("sql: no transaction")
+	}
+	err := e.txn.Rollback()
+	e.txn = nil
+	if err != nil {
+		return nil, err
+	}
+	return &Result{Message: "rollback"}, nil
 }
 
 func (e *Engine) store(table string) (*index.Store, error) {
 	if _, err := e.cat.get(table); err != nil {
 		return nil, err
 	}
-	return index.WrapTable(e.kv, table)
+	return index.WrapTable(e.dataKV(), table)
 }
 
 func (e *Engine) createTable(s *ast.CreateTable) (*Result, error) {
+	if e.inTxn() {
+		return nil, fmt.Errorf("sql: DDL is not allowed inside a transaction")
+	}
 	cols := make([]Column, 0, len(s.Cols))
 	seen := map[string]bool{}
 	for _, c := range s.Cols {
@@ -82,6 +151,9 @@ func (e *Engine) createTable(s *ast.CreateTable) (*Result, error) {
 }
 
 func (e *Engine) createIndex(s *ast.CreateIndex) (*Result, error) {
+	if e.inTxn() {
+		return nil, fmt.Errorf("sql: DDL is not allowed inside a transaction")
+	}
 	i, _, err := e.cat.col(s.Table, s.Column)
 	if err != nil {
 		return nil, err

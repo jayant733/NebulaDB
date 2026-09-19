@@ -106,3 +106,28 @@ type Delete struct {
 }
 
 func (*Delete) sqlStmt() {}
+
+// Isolation is a SQL transaction isolation level.
+type Isolation int
+
+const (
+	IsoReadCommitted Isolation = iota
+	IsoRepeatableRead
+)
+
+// Begin starts a transaction.
+type Begin struct {
+	Iso Isolation
+}
+
+func (*Begin) sqlStmt() {}
+
+// Commit ends a transaction and makes writes visible.
+type Commit struct{}
+
+func (*Commit) sqlStmt() {}
+
+// Rollback discards a transaction.
+type Rollback struct{}
+
+func (*Rollback) sqlStmt() {}

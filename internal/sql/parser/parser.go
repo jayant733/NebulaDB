@@ -69,6 +69,12 @@ func (p *Parser) statement() (ast.Stmt, error) {
 		return p.update()
 	case lexer.KwDelete:
 		return p.delete()
+	case lexer.KwBegin:
+		return p.begin()
+	case lexer.KwCommit:
+		return p.commit()
+	case lexer.KwRollback:
+		return p.rollback()
 	default:
 		return nil, fmt.Errorf("parser: expected statement, got %q", p.cur.Val)
 	}
@@ -375,6 +381,60 @@ func (p *Parser) delete() (ast.Stmt, error) {
 		d.Where = pred
 	}
 	return d, nil
+}
+
+func (p *Parser) begin() (ast.Stmt, error) {
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	if p.cur.Kind == lexer.KwTransaction {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+	}
+	iso := ast.IsoReadCommitted
+	if p.cur.Kind == lexer.KwRead {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+		if err := p.expect(lexer.KwCommitted, "COMMITTED"); err != nil {
+			return nil, err
+		}
+		iso = ast.IsoReadCommitted
+	} else if p.cur.Kind == lexer.KwRepeatable {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+		if err := p.expect(lexer.KwRead, "READ"); err != nil {
+			return nil, err
+		}
+		iso = ast.IsoRepeatableRead
+	}
+	return &ast.Begin{Iso: iso}, nil
+}
+
+func (p *Parser) commit() (ast.Stmt, error) {
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	if p.cur.Kind == lexer.KwTransaction {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+	}
+	return &ast.Commit{}, nil
+}
+
+func (p *Parser) rollback() (ast.Stmt, error) {
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	if p.cur.Kind == lexer.KwTransaction {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+	}
+	return &ast.Rollback{}, nil
 }
 
 func (p *Parser) predicate() (*ast.Predicate, error) {
