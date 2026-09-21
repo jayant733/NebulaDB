@@ -26,7 +26,7 @@ type Table struct {
 // Catalog is the on-disk table list.
 type Catalog struct {
 	mu     sync.Mutex
-	kv    storage.KV
+	kv     storage.KV
 	tables map[string]*Table
 }
 

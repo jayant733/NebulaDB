@@ -56,28 +56,35 @@ const (
 	KwRead
 	KwCommitted
 	KwRepeatable
+	KwJoin
+	KwInner
+	KwGroup
+	KwCount
+	KwSum
+	KwAvg
+	Dot
 )
 
 var keywords = map[string]Kind{
-	"CREATE": KwCreate,
-	"TABLE":  KwTable,
-	"INSERT": KwInsert,
-	"INTO":   KwInto,
-	"VALUES": KwValues,
-	"SELECT": KwSelect,
-	"FROM":   KwFrom,
-	"WHERE":  KwWhere,
-	"UPDATE": KwUpdate,
-	"SET":    KwSet,
-	"DELETE": KwDelete,
-	"ORDER":  KwOrder,
-	"BY":     KwBy,
-	"LIMIT":  KwLimit,
-	"INDEX":  KwIndex,
-	"ON":     KwOn,
-	"ASC":    KwAsc,
-	"DESC":   KwDesc,
-	"AND":    KwAnd,
+	"CREATE":      KwCreate,
+	"TABLE":       KwTable,
+	"INSERT":      KwInsert,
+	"INTO":        KwInto,
+	"VALUES":      KwValues,
+	"SELECT":      KwSelect,
+	"FROM":        KwFrom,
+	"WHERE":       KwWhere,
+	"UPDATE":      KwUpdate,
+	"SET":         KwSet,
+	"DELETE":      KwDelete,
+	"ORDER":       KwOrder,
+	"BY":          KwBy,
+	"LIMIT":       KwLimit,
+	"INDEX":       KwIndex,
+	"ON":          KwOn,
+	"ASC":         KwAsc,
+	"DESC":        KwDesc,
+	"AND":         KwAnd,
 	"INT":         KwInt,
 	"TEXT":        KwText,
 	"BEGIN":       KwBegin,
@@ -87,6 +94,12 @@ var keywords = map[string]Kind{
 	"READ":        KwRead,
 	"COMMITTED":   KwCommitted,
 	"REPEATABLE":  KwRepeatable,
+	"JOIN":        KwJoin,
+	"INNER":       KwInner,
+	"GROUP":       KwGroup,
+	"COUNT":       KwCount,
+	"SUM":         KwSum,
+	"AVG":         KwAvg,
 }
 
 // Token is one lexeme.
@@ -116,6 +129,9 @@ func (l *Lexer) Next() (Token, error) {
 	pos := l.i
 	r, w := utf8.DecodeRuneInString(l.src[l.i:])
 	switch r {
+	case '.':
+		l.i += w
+		return Token{Kind: Dot, Val: ".", Pos: pos}, nil
 	case '*':
 		l.i += w
 		return Token{Kind: Star, Val: "*", Pos: pos}, nil

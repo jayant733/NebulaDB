@@ -75,3 +75,9 @@ Network forwarding from a follower to the shard leader is Phase 10.
 The Phase 10 brief named gRPC. Raft already speaks `net/rpc`. Adding protobuf/gRPC for the same process would be two RPC stacks, two listen paths, and a `protoc` build story without a new consistency property.
 
 Client `Get`/`Set`/`Delete` and admin fault commands share one `net/rpc` server per process (`basePort+Nshards`). Timeouts, `ErrNotLeader` retries, and an inflight semaphore are the Phase 10 deliverable. gRPC remains an option if an external client ecosystem needs it.
+
+## ADR-012: Prometheus text format without client_golang
+
+**Status:** Accepted (Phase 11)
+
+`/metrics` is exposition-only. A small in-tree registry avoids a new module and keeps tests free of global Prometheus default-register races. Grafana imports `deploy/grafana/nebuladb.json`.

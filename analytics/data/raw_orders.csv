@@ -1,0 +1,7 @@
+id,Email, City,amount,order_id
+1,  A@X.COM , Pune, 100, 10
+1,a@x.com,Pune,50,11
+2, B@X.COM ,Pune,20,12
+3,c@x.com, Delhi,5,13
+,bad@x.com,Pune,9,99
+4,  skip@x.com ,Mumbai,not-a-number,14

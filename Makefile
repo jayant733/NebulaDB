@@ -1,4 +1,7 @@
-.PHONY: test race build fmt vet
+.PHONY: test race build fmt vet analytics
+
+analytics:
+	python analytics/pipeline.py --once
 
 test:
 	go test ./...

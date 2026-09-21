@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jayant/nebuladb/internal/metrics"
 	"github.com/jayant/nebuladb/internal/raft"
 	"github.com/jayant/nebuladb/internal/storage"
 )
@@ -78,6 +79,11 @@ func (k *KV) Exec(args KVArgs, reply *KVReply) error {
 		reply.Err = "netkv: overloaded"
 		return nil
 	}
+	start := time.Now()
+	defer func() {
+		metrics.Default.Inc("nebuladb_ops_total", "kv")
+		metrics.Since("nebuladb_op_duration_seconds", "kv", start)
+	}()
 	k.exec(args, reply, 0)
 	return nil
 }

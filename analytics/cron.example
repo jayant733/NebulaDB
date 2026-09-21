@@ -1,0 +1,9 @@
+# Example cron (Linux/macOS) — every hour
+# 0 * * * *  cd /path/to/Nebula && python analytics/pipeline.py --once
+
+# Windows Task Scheduler
+# Program: python
+# Arguments: D:\Nebula\analytics\pipeline.py --once
+# Start in: D:\Nebula
+
+# GitHub Actions: copy .github/workflows/analytics.yml (optional)

@@ -167,6 +167,42 @@ func TestSQLRepeatableRead(t *testing.T) {
 	}
 }
 
+func TestSQLJoinAndGroup(t *testing.T) {
+	kv, err := storage.Open(storage.Options{Dir: t.TempDir(), Sync: storage.SyncAlways})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer kv.Close()
+	e, err := New(kv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustExec(t, e, `CREATE TABLE dim_customer (id INT, email TEXT, city TEXT)`)
+	mustExec(t, e, `CREATE TABLE fact_order (id INT, customer_id INT, amount INT)`)
+	mustExec(t, e, `INSERT INTO dim_customer VALUES (1, 'a@x.com', 'Pune'), (2, 'b@x.com', 'Pune'), (3, 'c@x.com', 'Delhi')`)
+	mustExec(t, e, `INSERT INTO fact_order VALUES (10, 1, 100), (11, 1, 50), (12, 2, 20), (13, 3, 5)`)
+
+	r, err := e.Exec(`SELECT city, COUNT(*), SUM(amount) FROM fact_order INNER JOIN dim_customer ON fact_order.customer_id = dim_customer.id GROUP BY city`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][]string{}
+	for _, row := range r.Rows {
+		got[row[0]] = row
+	}
+	if got["Pune"][1] != "3" || got["Pune"][2] != "170" {
+		t.Fatalf("pune %+v", r.Rows)
+	}
+	if got["Delhi"][1] != "1" || got["Delhi"][2] != "5" {
+		t.Fatalf("delhi %+v", r.Rows)
+	}
+
+	r, err = e.Exec(`SELECT COUNT(*) FROM fact_order`)
+	if err != nil || len(r.Rows) != 1 || r.Rows[0][0] != "4" {
+		t.Fatalf("count %+v %v", r, err)
+	}
+}
+
 func mustExec(t *testing.T, e *Engine, q string) {
 	t.Helper()
 	if _, err := e.Exec(q); err != nil {

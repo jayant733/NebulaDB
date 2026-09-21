@@ -32,20 +32,17 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 10 — Networking** is current: client KV RPC forwards writes to the shard leader. Phase 9 chaos tests cover majority/minority partitions and injected disk errors.
+**Phase 12 — Analytics** is current: inner join, `GROUP BY` aggregates, and a Python ETL that exports CSV for Tableau / Power BI / Qlik.
 
 | Capability | Status |
 |------------|--------|
-| KV, WAL, LSM, indexes | Implemented |
-| SQL subset | Implemented |
-| Transactions + isolation | Implemented (not atomic across shards) |
-| Raft per shard | Implemented |
-| Local sharding + rebalance | Implemented |
-| Failure injection | Implemented (`nebulactl` + in-process chaos tests) |
-| Client KV RPC (forward) | Implemented (`net/rpc`, not gRPC) |
-| Observability / K8s | Later phases |
+| KV, WAL, LSM, indexes, Raft | Implemented |
+| SQL + JOIN + GROUP BY | Implemented (no windows/CTEs/triggers) |
+| Python ETL + BI CSV export | Implemented |
+| `/metrics` + Grafana JSON | Implemented |
+| Kubernetes | Phase 13 |
 
-Do not claim Prometheus metrics, 2PC, or Kubernetes until those phases exist and are tested.
+Do not claim Tableau, Spark, Databricks, or Snowflake as products we built. See [docs/skills.md](docs/skills.md).
 
 ## Quick start
 
@@ -55,7 +52,8 @@ Requires Go 1.22+.
 go test ./...
 go test -race ./...
 
-go run ./cmd/nebuladb --data ./data
+python analytics/etl.py
+go run ./cmd/nebuladb --data ./data --metrics 127.0.0.1:9100
 ```
 
 Three-node cluster (three terminals; write on the leader):
@@ -108,7 +106,8 @@ Restart with the same `--data` directory after a crash. Mutations are durable on
 | [docs/architecture.md](docs/architecture.md) | Target architecture vs what exists today |
 | [docs/storage.md](docs/storage.md) | WAL, MemTable, durability, recovery |
 | [docs/consistency.md](docs/consistency.md) | Intended consistency model |
-| [docs/decisions.md](docs/decisions.md) | Architecture Decision Records |
+| [docs/skills.md](docs/skills.md) | How analytics/SQL/Python skills map to this repo |
+| [analytics/README.md](analytics/README.md) | ETL + BI export |
 
 ## Principles
 

@@ -1,0 +1,14 @@
+{
+  "version": "0.1",
+  "connections": [
+    {
+      "details": {
+        "protocol": "file",
+        "address": {
+          "path": "..\\out\\orders_star.csv"
+        }
+      },
+      "mode": "Import"
+    }
+  ]
+}

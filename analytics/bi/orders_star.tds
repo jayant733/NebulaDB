@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<datasource formatted-name='NebulaDB orders_star' inline='true' source-platform='win' version='18.1'>
+  <connection class='textscan' directory='../out' filename='orders_star.csv' password='' server=''>
+    <relation name='orders_star' table='[orders_star.csv]' type='table'/>
+  </connection>
+  <aliases enabled='Y'/>
+  <column caption='City' datatype='string' name='[city]' role='dimension' type='nominal'/>
+  <column caption='Amount' datatype='integer' name='[amount]' role='measure' type='quantitative'/>
+</datasource>

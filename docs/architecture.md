@@ -1,8 +1,8 @@
 # Architecture
 
-## What exists today (Phase 10)
+## What exists today (Phase 11)
 
-Three process modes:
+Three process modes (unchanged from Phase 10), plus optional HTTP **`/metrics`** (`--metrics host:port`) in Prometheus text format. Grafana: `deploy/grafana/nebuladb.json`. HTTP is not used for Raft or client KV.
 
 1. **Single engine** (`--shards 1`, no `--peers`): SQL → one LSM.
 2. **One Raft group** (`--shards 1 --peers`): SQL → replicated LSM (Phase 6).

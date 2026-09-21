@@ -85,3 +85,17 @@ func TestParseSelectStar(t *testing.T) {
 		t.Fatal("star")
 	}
 }
+
+func TestParseJoinGroup(t *testing.T) {
+	s, err := Parse(`SELECT city, COUNT(*), SUM(amount) FROM fact_order INNER JOIN dim_customer ON fact_order.customer_id = dim_customer.id GROUP BY city`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sel := s.(*ast.Select)
+	if sel.Join == nil || sel.Join.Table != "dim_customer" || sel.Join.LeftCol != "customer_id" || sel.GroupCol != "city" {
+		t.Fatalf("%+v %+v", sel, sel.Join)
+	}
+	if len(sel.Items) != 3 || sel.Items[1].Agg != ast.AggCount || sel.Items[2].Agg != ast.AggSum {
+		t.Fatalf("%+v", sel.Items)
+	}
+}

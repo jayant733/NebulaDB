@@ -238,11 +238,14 @@ func (p *Parser) selectStmt() (ast.Stmt, error) {
 		}
 	} else {
 		for {
-			col, err := p.ident()
+			item, err := p.selectItem()
 			if err != nil {
 				return nil, err
 			}
-			s.Cols = append(s.Cols, col)
+			s.Items = append(s.Items, item)
+			if item.Agg == ast.AggNone && item.Col != "" {
+				s.Cols = append(s.Cols, item.Col)
+			}
 			if p.cur.Kind == lexer.Comma {
 				if err := p.advance(); err != nil {
 					return nil, err
@@ -260,6 +263,18 @@ func (p *Parser) selectStmt() (ast.Stmt, error) {
 		return nil, err
 	}
 	s.Table = table
+	if p.cur.Kind == lexer.KwInner {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+	}
+	if p.cur.Kind == lexer.KwJoin {
+		j, err := p.join(s.Table)
+		if err != nil {
+			return nil, err
+		}
+		s.Join = j
+	}
 	if p.cur.Kind == lexer.KwWhere {
 		if err := p.advance(); err != nil {
 			return nil, err
@@ -269,6 +284,19 @@ func (p *Parser) selectStmt() (ast.Stmt, error) {
 			return nil, err
 		}
 		s.Where = pred
+	}
+	if p.cur.Kind == lexer.KwGroup {
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+		if err := p.expect(lexer.KwBy, "BY"); err != nil {
+			return nil, err
+		}
+		g, err := p.ident()
+		if err != nil {
+			return nil, err
+		}
+		s.GroupCol = g
 	}
 	if p.cur.Kind == lexer.KwOrder {
 		if err := p.advance(); err != nil {
@@ -310,6 +338,113 @@ func (p *Parser) selectStmt() (ast.Stmt, error) {
 		}
 	}
 	return s, nil
+}
+
+func (p *Parser) selectItem() (ast.SelItem, error) {
+	switch p.cur.Kind {
+	case lexer.KwCount:
+		if err := p.advance(); err != nil {
+			return ast.SelItem{}, err
+		}
+		if err := p.expect(lexer.LParen, "("); err != nil {
+			return ast.SelItem{}, err
+		}
+		item := ast.SelItem{Agg: ast.AggCount}
+		if p.cur.Kind == lexer.Star {
+			if err := p.advance(); err != nil {
+				return ast.SelItem{}, err
+			}
+		} else {
+			col, err := p.ident()
+			if err != nil {
+				return ast.SelItem{}, err
+			}
+			item.Col = col
+		}
+		if err := p.expect(lexer.RParen, ")"); err != nil {
+			return ast.SelItem{}, err
+		}
+		return item, nil
+	case lexer.KwSum, lexer.KwAvg:
+		agg := ast.AggSum
+		if p.cur.Kind == lexer.KwAvg {
+			agg = ast.AggAvg
+		}
+		if err := p.advance(); err != nil {
+			return ast.SelItem{}, err
+		}
+		if err := p.expect(lexer.LParen, "("); err != nil {
+			return ast.SelItem{}, err
+		}
+		col, err := p.ident()
+		if err != nil {
+			return ast.SelItem{}, err
+		}
+		if err := p.expect(lexer.RParen, ")"); err != nil {
+			return ast.SelItem{}, err
+		}
+		return ast.SelItem{Agg: agg, Col: col}, nil
+	default:
+		col, err := p.ident()
+		if err != nil {
+			return ast.SelItem{}, err
+		}
+		return ast.SelItem{Col: col}, nil
+	}
+}
+
+func (p *Parser) join(leftTable string) (*ast.Join, error) {
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	right, err := p.ident()
+	if err != nil {
+		return nil, err
+	}
+	if err := p.expect(lexer.KwOn, "ON"); err != nil {
+		return nil, err
+	}
+	lt, lc, err := p.qualified()
+	if err != nil {
+		return nil, err
+	}
+	if err := p.expect(lexer.Eq, "="); err != nil {
+		return nil, err
+	}
+	rt, rc, err := p.qualified()
+	if err != nil {
+		return nil, err
+	}
+	if lt == "" {
+		lt = leftTable
+	}
+	if rt == "" {
+		rt = right
+	}
+	// If the user wrote right.col = left.col, swap so Left* is the FROM table.
+	if lt == right && rt == leftTable {
+		lt, rt = rt, lt
+		lc, rc = rc, lc
+	}
+	return &ast.Join{Table: right, LeftTable: lt, LeftCol: lc, RightCol: rc}, nil
+}
+
+func (p *Parser) qualified() (table, col string, err error) {
+	a, err := p.ident()
+	if err != nil {
+		return "", "", err
+	}
+	if p.cur.Kind != lexer.Dot {
+		return "", a, nil
+	}
+	if err := p.advance(); err != nil {
+		return "", "", err
+	}
+	b, err := p.ident()
+	if err != nil {
+		return "", "", err
+	}
+	return a, b, nil
 }
 
 func (p *Parser) update() (ast.Stmt, error) {

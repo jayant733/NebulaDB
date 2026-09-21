@@ -74,6 +74,10 @@ A 3-node group still commits after one follower is isolated. A leader cut off in
 
 `Set`/`Get`/`Delete` over `net/rpc` to any replica are forwarded to the shard leader. Inflight handlers are capped (32). Call deadline is two seconds. SQL is not on the wire.
 
+## Phase 11 (metrics, as implemented)
+
+`GET /metrics` exposes counters and latency histograms. QPS is derived in Grafana as `rate(nebuladb_ops_total[1m])`, not a number published in the README.
+
 ## What we will not claim until tested
 
 - "CP in CAP" without partition tests

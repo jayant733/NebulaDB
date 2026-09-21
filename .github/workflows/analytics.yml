@@ -1,0 +1,15 @@
+# Optional scheduled pipeline. Does not talk to Databricks or Snowflake.
+name: analytics-pipeline
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+jobs:
+  etl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python analytics/pipeline.py --once

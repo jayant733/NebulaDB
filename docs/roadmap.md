@@ -87,15 +87,19 @@ Each shard is its own Raft group (leader + followers). See [docs/phases/phase-08
 
 Client KV RPC with forward-to-leader, timeouts, retries, and inflight backpressure. See [docs/phases/phase-10-networking.md](phases/phase-10-networking.md).
 
-## Phase 11 — Observability
+## Phase 11 — Observability (done)
 
-`/metrics` (Prometheus): QPS, latency histograms, WAL fsyncs, elections, compaction. Grafana dashboards.
+`/metrics` (Prometheus text format): QPS, latency histograms, WAL fsyncs, elections, compaction. Grafana dashboard JSON. See [docs/phases/phase-11-observability.md](phases/phase-11-observability.md).
 
-## Phase 12 — Kubernetes
+## Phase 12 — Analytics SQL + Python ETL (done)
+
+Inner join, `GROUP BY` aggregates, Python gather/clean/load, CSV export. Side layer: Spark-shaped job, Databricks notebook source, Snowflake `COPY INTO` template, scheduled `pipeline.py`, Power BI/Tableau stubs + HTML chart. See [docs/skills.md](skills.md) and [docs/phases/phase-12-analytics.md](phases/phase-12-analytics.md).
+
+## Phase 13 — Kubernetes
 
 StatefulSet, PVCs, headless Service, probes. Rolling restart must not lose committed data.
 
-## Phase 13 — Benchmarks + docs
+## Phase 14 — Benchmarks + docs
 
 Publish **measured** numbers only. `docs/benchmarks.md` with hardware, commit SHA, and method.
 
@@ -107,3 +111,4 @@ Publish **measured** numbers only. `docs/benchmarks.md` with hardware, commit SH
 - Do not implement HTTP CRUD as a substitute for the storage engine.
 - Do not copy an entire Raft library into `internal/raft` without understanding and tests (write it, or document a comparison experiment).
 - Do not write resume bullets for phases that are not implemented.
+- Do not claim Tableau, Spark, Databricks, or Snowflake as products we built. Side-feature recipes and a local Spark-shaped job read the exported CSV.

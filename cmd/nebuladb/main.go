@@ -12,6 +12,7 @@ import (
 
 	"github.com/jayant/nebuladb/internal/cluster"
 	"github.com/jayant/nebuladb/internal/index"
+	"github.com/jayant/nebuladb/internal/metrics"
 	"github.com/jayant/nebuladb/internal/raft"
 	"github.com/jayant/nebuladb/internal/shard"
 	"github.com/jayant/nebuladb/internal/sql/engine"
@@ -37,6 +38,7 @@ func main() {
 	id := flag.String("id", "", "raft node id (cluster mode)")
 	peers := flag.String("peers", "", "raft peers id=host:port,...")
 	nshards := flag.Int("shards", 1, "shard count (with --peers, one Raft group each)")
+	metricsAddr := flag.String("metrics", "", "Prometheus /metrics listen address (e.g. 127.0.0.1:9100)")
 	flag.Parse()
 
 	if *nshards < 1 {
@@ -152,7 +154,16 @@ func main() {
 	}
 	r := &repl{eng: eng, engs: engs, kv: kv, idx: idx, sql: sqleng, node: node, nodes: nodes, id: *id}
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 8 — shards=%d  data=%s  sync=%v\n", *nshards, *data, !*nosync)
+	if strings.TrimSpace(*metricsAddr) != "" {
+		mln, err := metrics.Listen(*metricsAddr, metrics.Default)
+		if err != nil {
+			fatalf("metrics: %v", err)
+		}
+		defer mln.Close()
+		fmt.Fprintf(os.Stderr, "metrics /metrics on %s\n", mln.Addr())
+	}
+
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 11 — shards=%d  data=%s  sync=%v\n", *nshards, *data, !*nosync)
 	fmt.Fprintln(os.Stderr, "SQL: CREATE/INSERT/SELECT/UPDATE/DELETE | BEGIN/COMMIT/ROLLBACK")
 	fmt.Fprintln(os.Stderr, "KV:  set | get | del | flush | help | exit")
 
@@ -189,7 +200,7 @@ func run(r *repl, line string) error {
 		fmt.Println("SQL:")
 		fmt.Println("  CREATE TABLE t (id INT, name TEXT, age INT);")
 		fmt.Println("  INSERT INTO t VALUES (1, 'Jayant', 20);")
-		fmt.Println("  SELECT * FROM t WHERE age >= 18 ORDER BY name LIMIT 10;")
+		fmt.Println("  SELECT city, COUNT(*), SUM(amount) FROM fact_order INNER JOIN dim_customer ON fact_order.customer_id = dim_customer.id GROUP BY city;")
 		fmt.Println("  UPDATE t SET age = 21 WHERE id = 1;")
 		fmt.Println("  DELETE FROM t WHERE id = 1;")
 		fmt.Println("  BEGIN;  COMMIT;  ROLLBACK;  BEGIN REPEATABLE READ;")

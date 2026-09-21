@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/jayant/nebuladb/internal/metrics"
 )
 
 var (
@@ -199,6 +201,7 @@ func (n *Node) startElection() {
 	n.role = Candidate
 	n.persist.state.CurrentTerm++
 	n.persist.state.VotedFor = n.id
+	metrics.Default.Inc("nebuladb_raft_elections_total", "")
 	term := n.persist.state.CurrentTerm
 	lastIdx, lastTerm := n.lastLocked()
 	n.votes = 1
@@ -256,6 +259,7 @@ func (n *Node) majority() int {
 func (n *Node) becomeLeaderLocked() {
 	n.role = Leader
 	n.leader = n.id
+	metrics.Default.Inc("nebuladb_raft_leader_changes_total", "")
 	last := n.lastIndexLocked()
 	for _, p := range n.peers {
 		n.nextIndex[p] = last + 1

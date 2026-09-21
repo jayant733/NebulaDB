@@ -210,7 +210,7 @@ type memRow struct {
 }
 
 func (e *Engine) selectStmt(s *ast.Select) (*Result, error) {
-	tab, err := e.cat.get(s.Table)
+	left, err := e.cat.get(s.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -218,12 +218,71 @@ func (e *Engine) selectStmt(s *ast.Select) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := e.gather(st, tab, s.Where)
-	if err != nil {
-		return nil, err
+	var (
+		rows []memRow
+		tab  *Table
+	)
+	if s.Join != nil {
+		right, err := e.cat.get(s.Join.Table)
+		if err != nil {
+			return nil, err
+		}
+		rst, err := e.store(s.Join.Table)
+		if err != nil {
+			return nil, err
+		}
+		lrows, err := e.gather(st, left, nil)
+		if err != nil {
+			return nil, err
+		}
+		rrows, err := e.gather(rst, right, nil)
+		if err != nil {
+			return nil, err
+		}
+		li, ltyp, err := colOf(left, s.Join.LeftCol)
+		if err != nil {
+			return nil, err
+		}
+		ri, _, err := colOf(right, s.Join.RightCol)
+		if err != nil {
+			return nil, err
+		}
+		var joined []memRow
+		for _, L := range lrows {
+			lf, _ := row.Field(L.fields, li)
+			for _, R := range rrows {
+				rf, _ := row.Field(R.fields, ri)
+				if compareStored(lf, rf, ltyp) != 0 {
+					continue
+				}
+				joined = append(joined, memRow{fields: concatFields(L.fields, R.fields)})
+			}
+		}
+		cols := append([]Column{}, left.Cols...)
+		cols = append(cols, right.Cols...)
+		tab = &Table{Name: s.Table, Cols: cols}
+		rows, err = e.filter(tab, joined, s.Where)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		tab = left
+		rows, err = e.gather(st, left, s.Where)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	if s.GroupCol != "" || hasAgg(s) {
+		out, err := e.aggregate(tab, rows, s)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
 	if s.OrderCol != "" {
-		oi, ot, err := e.cat.col(s.Table, s.OrderCol)
+		oi, ot, err := colOf(tab, s.OrderCol)
 		if err != nil {
 			return nil, err
 		}
@@ -243,14 +302,23 @@ func (e *Engine) selectStmt(s *ast.Select) (*Result, error) {
 	}
 	var cols []string
 	var idxs []int
-	if s.Star || len(s.Cols) == 0 {
+	if s.Star || (len(s.Cols) == 0 && len(s.Items) == 0) {
 		for i, c := range tab.Cols {
 			cols = append(cols, c.Name)
 			idxs = append(idxs, i)
 		}
+	} else if len(s.Items) > 0 {
+		for _, it := range s.Items {
+			i, _, err := colOf(tab, it.Col)
+			if err != nil {
+				return nil, err
+			}
+			cols = append(cols, it.Col)
+			idxs = append(idxs, i)
+		}
 	} else {
 		for _, name := range s.Cols {
-			i, _, err := e.cat.col(s.Table, name)
+			i, _, err := colOf(tab, name)
 			if err != nil {
 				return nil, err
 			}
@@ -268,6 +336,138 @@ func (e *Engine) selectStmt(s *ast.Select) (*Result, error) {
 		out = append(out, line)
 	}
 	return &Result{Columns: cols, Rows: out}, nil
+}
+
+func hasAgg(s *ast.Select) bool {
+	for _, it := range s.Items {
+		if it.Agg != ast.AggNone {
+			return true
+		}
+	}
+	return false
+}
+
+func colOf(t *Table, name string) (int, ast.Type, error) {
+	found := -1
+	var typ ast.Type
+	for i, c := range t.Cols {
+		if c.Name == name {
+			if found >= 0 {
+				return 0, 0, fmt.Errorf("sql: column %q is ambiguous", name)
+			}
+			found = i
+			typ = c.Type
+		}
+	}
+	if found < 0 {
+		return 0, 0, fmt.Errorf("sql: column %q not in %s", name, t.Name)
+	}
+	return found, typ, nil
+}
+
+func concatFields(a, b [][]byte) [][]byte {
+	out := make([][]byte, 0, len(a)+len(b))
+	out = append(out, a...)
+	out = append(out, b...)
+	return out
+}
+
+func (e *Engine) aggregate(tab *Table, rows []memRow, s *ast.Select) (*Result, error) {
+	groups := map[string][]memRow{}
+	var keys []string
+	if s.GroupCol == "" {
+		groups[""] = rows
+		keys = []string{""}
+	} else {
+		gi, _, err := colOf(tab, s.GroupCol)
+		if err != nil {
+			return nil, err
+		}
+		seen := map[string]bool{}
+		for _, r := range rows {
+			f, _ := row.Field(r.fields, gi)
+			k := string(f)
+			if !seen[k] {
+				keys = append(keys, k)
+				seen[k] = true
+			}
+			groups[k] = append(groups[k], r)
+		}
+	}
+	items := s.Items
+	if len(items) == 0 && s.GroupCol != "" {
+		items = []ast.SelItem{{Col: s.GroupCol}, {Agg: ast.AggCount}}
+	}
+	var colnames []string
+	for _, it := range items {
+		switch it.Agg {
+		case ast.AggCount:
+			if it.Col == "" {
+				colnames = append(colnames, "COUNT(*)")
+			} else {
+				colnames = append(colnames, "COUNT("+it.Col+")")
+			}
+		case ast.AggSum:
+			colnames = append(colnames, "SUM("+it.Col+")")
+		case ast.AggAvg:
+			colnames = append(colnames, "AVG("+it.Col+")")
+		default:
+			colnames = append(colnames, it.Col)
+		}
+	}
+	var out [][]string
+	for _, k := range keys {
+		g := groups[k]
+		line := make([]string, len(items))
+		for i, it := range items {
+			switch it.Agg {
+			case ast.AggCount:
+				line[i] = fmt.Sprintf("%d", len(g))
+			case ast.AggSum, ast.AggAvg:
+				ci, typ, err := colOf(tab, it.Col)
+				if err != nil {
+					return nil, err
+				}
+				if typ != ast.TypeInt {
+					return nil, fmt.Errorf("sql: SUM/AVG requires INT")
+				}
+				var sum int64
+				for _, r := range g {
+					f, _ := row.Field(r.fields, ci)
+					n, err := decodeInt(f)
+					if err != nil {
+						return nil, err
+					}
+					sum += n
+				}
+				if it.Agg == ast.AggAvg {
+					if len(g) == 0 {
+						line[i] = "0"
+					} else {
+						line[i] = fmt.Sprintf("%d", sum/int64(len(g)))
+					}
+				} else {
+					line[i] = fmt.Sprintf("%d", sum)
+				}
+			default:
+				ci, typ, err := colOf(tab, it.Col)
+				if err != nil {
+					return nil, err
+				}
+				if len(g) == 0 {
+					line[i] = ""
+					continue
+				}
+				f, _ := row.Field(g[0].fields, ci)
+				line[i] = display(f, typ)
+			}
+		}
+		out = append(out, line)
+	}
+	if s.Limit >= 0 && s.Limit < len(out) {
+		out = out[:s.Limit]
+	}
+	return &Result{Columns: colnames, Rows: out}, nil
 }
 
 func (e *Engine) update(s *ast.Update) (*Result, error) {

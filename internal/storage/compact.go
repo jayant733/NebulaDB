@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/jayant/nebuladb/internal/metrics"
 	"github.com/jayant/nebuladb/internal/storage/sstable"
 )
 
@@ -87,5 +88,6 @@ func (e *Engine) compactAllLocked() error {
 		_ = s.Close()
 		_ = os.Remove(p)
 	}
+	metrics.Default.Inc("nebuladb_compactions_total", "")
 	return nil
 }

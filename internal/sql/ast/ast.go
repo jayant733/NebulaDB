@@ -71,12 +71,39 @@ type Predicate struct {
 	Next *Predicate
 }
 
+// SelItem is one SELECT list entry.
+type SelItem struct {
+	Agg Agg    // AggNone means a column
+	Col string // empty for COUNT(*)
+}
+
+// Agg is an aggregate function.
+type Agg int
+
+const (
+	AggNone Agg = iota
+	AggCount
+	AggSum
+	AggAvg
+)
+
+// Join is INNER JOIN right ON left.col = right.col.
+type Join struct {
+	Table     string
+	LeftTable string
+	LeftCol   string
+	RightCol  string
+}
+
 // Select reads rows.
 type Select struct {
 	Table     string
-	Cols      []string // nil or empty means *
+	Join      *Join
+	Items     []SelItem
+	Cols      []string // unqualified columns when no aggregates (compat)
 	Star      bool
 	Where     *Predicate
+	GroupCol  string
 	OrderCol  string
 	OrderDesc bool
 	Limit     int // -1 = none

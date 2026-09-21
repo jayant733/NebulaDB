@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
+	"github.com/jayant/nebuladb/internal/metrics"
 	"github.com/jayant/nebuladb/internal/storage/memtable"
 	"github.com/jayant/nebuladb/internal/storage/sstable"
 	"github.com/jayant/nebuladb/internal/storage/wal"
@@ -137,6 +139,11 @@ func (e *Engine) Close() error {
 
 // Set writes key=value. Empty keys are rejected.
 func (e *Engine) Set(key, value []byte) error {
+	start := time.Now()
+	defer func() {
+		metrics.Default.Inc("nebuladb_ops_total", "set")
+		metrics.Since("nebuladb_op_duration_seconds", "set", start)
+	}()
 	if len(key) == 0 {
 		return fmt.Errorf("storage: empty key")
 	}
@@ -162,6 +169,11 @@ func (e *Engine) setLocked(key, value []byte) error {
 
 // Delete tombstones key.
 func (e *Engine) Delete(key []byte) error {
+	start := time.Now()
+	defer func() {
+		metrics.Default.Inc("nebuladb_ops_total", "delete")
+		metrics.Since("nebuladb_op_duration_seconds", "delete", start)
+	}()
 	if len(key) == 0 {
 		return fmt.Errorf("storage: empty key")
 	}
@@ -276,6 +288,11 @@ func parseSSTID(path string) uint64 {
 
 // Get reads MemTable then SSTables newest-first. A MemTable tombstone hides SST values.
 func (e *Engine) Get(key []byte) ([]byte, bool, error) {
+	start := time.Now()
+	defer func() {
+		metrics.Default.Inc("nebuladb_ops_total", "get")
+		metrics.Since("nebuladb_op_duration_seconds", "get", start)
+	}()
 	if len(key) == 0 {
 		return nil, false, fmt.Errorf("storage: empty key")
 	}

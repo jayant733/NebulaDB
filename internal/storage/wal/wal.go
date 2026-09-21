@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"sync"
+
+	"github.com/jayant/nebuladb/internal/metrics"
 )
 
 // RecordType identifies a mutation stored in the log.
@@ -74,8 +76,18 @@ func (w *WAL) Append(rec Record) error {
 		return err
 	}
 	if w.sync {
-		return w.f.Sync()
+		if err := w.fsyncLocked(); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func (w *WAL) fsyncLocked() error {
+	if err := w.f.Sync(); err != nil {
+		return err
+	}
+	metrics.Default.Inc("nebuladb_wal_fsyncs_total", "")
 	return nil
 }
 
@@ -83,7 +95,7 @@ func (w *WAL) Append(rec Record) error {
 func (w *WAL) Sync() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.f.Sync()
+	return w.fsyncLocked()
 }
 
 // Reset truncates the log after a successful MemTable flush (WAL rotate).
@@ -100,7 +112,7 @@ func (w *WAL) Reset() error {
 		return err
 	}
 	if w.sync {
-		return w.f.Sync()
+		return w.fsyncLocked()
 	}
 	return nil
 }
@@ -126,7 +138,7 @@ func (w *WAL) Close() error {
 	if w.f == nil {
 		return nil
 	}
-	err := w.f.Sync()
+	err := w.fsyncLocked()
 	cerr := w.f.Close()
 	w.f = nil
 	if err != nil {

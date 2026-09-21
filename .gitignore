@@ -14,6 +14,7 @@
 
 # Data / WAL (local runs)
 /data/
+/analytics/out/
 *.log
 
 # Go
