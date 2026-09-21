@@ -17,6 +17,10 @@
 /analytics/out/
 *.log
 
+# Python
+__pycache__/
+*.pyc
+
 # Go
 vendor/
 coverage.out
