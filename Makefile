@@ -1,7 +1,10 @@
-.PHONY: test race build fmt vet analytics
+.PHONY: test race build fmt vet analytics bench
 
 analytics:
 	python analytics/pipeline.py --once
+
+bench:
+	go run ./cmd/bench -n 2000
 
 test:
 	go test ./...

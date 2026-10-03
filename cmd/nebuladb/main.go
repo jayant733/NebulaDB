@@ -3,12 +3,16 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"syscall"
 
 	"github.com/jayant/nebuladb/internal/cluster"
 	"github.com/jayant/nebuladb/internal/index"
@@ -38,7 +42,9 @@ func main() {
 	id := flag.String("id", "", "raft node id (cluster mode)")
 	peers := flag.String("peers", "", "raft peers id=host:port,...")
 	nshards := flag.Int("shards", 1, "shard count (with --peers, one Raft group each)")
-	metricsAddr := flag.String("metrics", "", "Prometheus /metrics listen address (e.g. 127.0.0.1:9100)")
+	httpAddr := flag.String("http", "", "HTTP listen for /metrics /livez /readyz (e.g. :8080)")
+	metricsAddr := flag.String("metrics", "", "alias for --http")
+	serve := flag.Bool("serve", false, "no REPL; wait for SIGTERM (containers)")
 	flag.Parse()
 
 	if *nshards < 1 {
@@ -154,18 +160,38 @@ func main() {
 	}
 	r := &repl{eng: eng, engs: engs, kv: kv, idx: idx, sql: sqleng, node: node, nodes: nodes, id: *id}
 
-	if strings.TrimSpace(*metricsAddr) != "" {
-		mln, err := metrics.Listen(*metricsAddr, metrics.Default)
+	var ready atomic.Bool
+	ready.Store(true)
+	listen := strings.TrimSpace(*httpAddr)
+	if listen == "" {
+		listen = strings.TrimSpace(*metricsAddr)
+	}
+	if listen != "" {
+		mln, err := metrics.ListenProbes(listen, metrics.Default, &ready)
 		if err != nil {
-			fatalf("metrics: %v", err)
+			fatalf("http: %v", err)
 		}
 		defer mln.Close()
-		fmt.Fprintf(os.Stderr, "metrics /metrics on %s\n", mln.Addr())
+		fmt.Fprintf(os.Stderr, "http /metrics /livez /readyz on %s\n", mln.Addr())
 	}
 
-	fmt.Fprintf(os.Stderr, "nebuladb Phase 11 — shards=%d  data=%s  sync=%v\n", *nshards, *data, !*nosync)
+	fmt.Fprintf(os.Stderr, "nebuladb Phase 13 — shards=%d  data=%s  sync=%v\n", *nshards, *data, !*nosync)
 	fmt.Fprintln(os.Stderr, "SQL: CREATE/INSERT/SELECT/UPDATE/DELETE | BEGIN/COMMIT/ROLLBACK")
 	fmt.Fprintln(os.Stderr, "KV:  set | get | del | flush | help | exit")
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if *serve {
+		fmt.Fprintln(os.Stderr, "serve mode: waiting for SIGTERM")
+		<-ctx.Done()
+		ready.Store(false)
+		return
+	}
+	go func() {
+		<-ctx.Done()
+		ready.Store(false)
+		_ = os.Stdin.Close()
+	}()
 
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)

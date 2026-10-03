@@ -2,7 +2,7 @@
 
 A distributed, fault-tolerant SQL database engine written in Go — **from scratch**.
 
-Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recovery, consensus, and a focused SQL subset as real internals.
+Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recovery, consensus, a focused SQL subset, a Python analytics layer, Kubernetes manifests, and **measured** KV microbenchmarks.
 
 ```
                      SQL Client
@@ -32,15 +32,16 @@ Not a CRUD app. Not a PostgreSQL wrapper. This project implements storage, recov
 
 ## Current status
 
-**Phase 12 — Analytics** is current: inner join, `GROUP BY` aggregates, and a Python ETL that exports CSV for Tableau / Power BI / Qlik.
+**Phases 1–14 of the in-repo plan are implemented.** Throughput belongs in [docs/benchmarks.md](docs/benchmarks.md) only.
 
 | Capability | Status |
 |------------|--------|
-| KV, WAL, LSM, indexes, Raft | Implemented |
+| KV, WAL, LSM, indexes, Raft, shards | Implemented |
 | SQL + JOIN + GROUP BY | Implemented (no windows/CTEs/triggers) |
-| Python ETL + BI CSV export | Implemented |
-| `/metrics` + Grafana JSON | Implemented |
-| Kubernetes | Phase 13 |
+| Python ETL + BI/Spark/Snowflake recipes | Implemented (tools not embedded) |
+| `/metrics` `/livez` `/readyz` + Grafana JSON | Implemented |
+| Kubernetes StatefulSet + PVC | Manifests + probes; not a live GKE operator |
+| Benchmarks | Measured; see [docs/benchmarks.md](docs/benchmarks.md) |
 
 Do not claim Tableau, Spark, Databricks, or Snowflake as products we built. See [docs/skills.md](docs/skills.md).
 
@@ -50,10 +51,16 @@ Requires Go 1.22+.
 
 ```bash
 go test ./...
-go test -race ./...
+go run ./cmd/bench -n 5000
+python analytics/pipeline.py --once
+go run ./cmd/nebuladb --data ./data --http 127.0.0.1:8080
+```
 
-python analytics/etl.py
-go run ./cmd/nebuladb --data ./data --metrics 127.0.0.1:9100
+Container / Kubernetes (image must be loaded into the cluster; CI does not run `kind`):
+
+```bash
+docker build -t nebuladb:local .
+kubectl apply -f deploy/k8s/nebuladb.yaml
 ```
 
 Three-node cluster (three terminals; write on the leader):
@@ -96,7 +103,7 @@ COMMIT;
 SELECT * FROM users;
 ```
 
-Restart with the same `--data` directory after a crash. Mutations are durable once the WAL append has been synced.
+Restart with the same `--data` directory after a crash. Mutations are durable once the WAL append has been synced. `--serve` waits for SIGTERM (containers).
 
 ## Documentation
 
@@ -106,8 +113,10 @@ Restart with the same `--data` directory after a crash. Mutations are durable on
 | [docs/architecture.md](docs/architecture.md) | Target architecture vs what exists today |
 | [docs/storage.md](docs/storage.md) | WAL, MemTable, durability, recovery |
 | [docs/consistency.md](docs/consistency.md) | Intended consistency model |
+| [docs/benchmarks.md](docs/benchmarks.md) | Measured KV Set/Get |
 | [docs/skills.md](docs/skills.md) | How analytics/SQL/Python skills map to this repo |
 | [analytics/README.md](analytics/README.md) | ETL + BI export |
+| [deploy/k8s/README.md](deploy/k8s/README.md) | StatefulSet |
 
 ## Principles
 

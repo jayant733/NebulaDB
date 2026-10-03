@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -43,5 +44,40 @@ func TestHandler(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "nebuladb_compactions_total 1") {
 		t.Fatalf("%s", body)
+	}
+}
+
+func TestProbes(t *testing.T) {
+	var ready atomic.Bool
+	ts := httptest.NewServer(Mux(New(), &ready))
+	defer ts.Close()
+	c := ts.Client()
+
+	live, err := c.Get(ts.URL + "/livez")
+	if err != nil {
+		t.Fatal(err)
+	}
+	live.Body.Close()
+	if live.StatusCode != 200 {
+		t.Fatalf("livez %d", live.StatusCode)
+	}
+
+	notReady, err := c.Get(ts.URL + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	notReady.Body.Close()
+	if notReady.StatusCode != 503 {
+		t.Fatalf("readyz before ready: %d", notReady.StatusCode)
+	}
+
+	ready.Store(true)
+	ok, err := c.Get(ts.URL + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok.Body.Close()
+	if ok.StatusCode != 200 {
+		t.Fatalf("readyz after ready: %d", ok.StatusCode)
 	}
 }

@@ -1,0 +1,70 @@
+# Single-replica durable NebulaDB. PVC keeps WAL/SSTables across pod replacement.
+# Apply: kubectl apply -f deploy/k8s/nebuladb.yaml
+# Image must exist in the cluster (kind load docker-image nebuladb:local).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nebuladb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nebuladb
+  namespace: nebuladb
+spec:
+  clusterIP: None
+  selector:
+    app: nebuladb
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nebuladb
+  namespace: nebuladb
+spec:
+  serviceName: nebuladb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nebuladb
+  template:
+    metadata:
+      labels:
+        app: nebuladb
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 65532
+      containers:
+        - name: nebuladb
+          image: nebuladb:local
+          imagePullPolicy: IfNotPresent
+          args: ["--data", "/data", "--http", ":8080", "--serve"]
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

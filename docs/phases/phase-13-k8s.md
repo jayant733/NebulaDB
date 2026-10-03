@@ -13,13 +13,13 @@ This phase does **not** replace Raft with etcd or wrap a cloud database. We do n
 
 ## Definition of done
 
-- [ ] `GET /livez` → 200 while the process is up
-- [ ] `GET /readyz` → 200 after open, 503 after shutdown starts
-- [ ] `--serve` blocks without a REPL (container stdin is not a TTY)
-- [ ] SIGTERM / Interrupt runs `Engine.Close` (WAL fsync) before exit
-- [ ] StatefulSet `volumeClaimTemplates` mount `/data`
-- [ ] Headless Service (`clusterIP: None`) for stable DNS
-- [ ] Rolling restart **intent**: PVC survives pod replacement; committed `Set` with `sync=always` is on disk after Close. We do not invent a measured zero-downtime SLA.
+- [x] `GET /livez` → 200 while the process is up
+- [x] `GET /readyz` → 200 after open, 503 after shutdown starts
+- [x] `--serve` blocks without a REPL (container stdin is not a TTY)
+- [x] SIGTERM / Interrupt runs `Engine.Close` (WAL fsync) before exit
+- [x] StatefulSet `volumeClaimTemplates` mount `/data`
+- [x] Headless Service (`clusterIP: None`) for stable DNS
+- [x] Rolling restart **intent**: PVC survives pod replacement; committed `Set` with `sync=always` is on disk after Close. We do not invent a measured zero-downtime SLA.
 
 ## HTTP (same listener as metrics)
 

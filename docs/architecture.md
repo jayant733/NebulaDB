@@ -1,8 +1,8 @@
 # Architecture
 
-## What exists today (Phase 11)
+## What exists today (Phase 13)
 
-Three process modes (unchanged from Phase 10), plus optional HTTP **`/metrics`** (`--metrics host:port`) in Prometheus text format. Grafana: `deploy/grafana/nebuladb.json`. HTTP is not used for Raft or client KV.
+Three process modes (unchanged from Phase 10), plus HTTP **`/metrics` `/livez` `/readyz`** (`--http host:port`). `--serve` waits for SIGTERM so Kubernetes can run the binary without a REPL. Grafana: `deploy/grafana/nebuladb.json`. Manifests: `deploy/k8s/nebuladb.yaml`. HTTP is not used for Raft or client KV.
 
 1. **Single engine** (`--shards 1`, no `--peers`): SQL → one LSM.
 2. **One Raft group** (`--shards 1 --peers`): SQL → replicated LSM (Phase 6).
@@ -34,7 +34,7 @@ Writes on a process succeed only when that process is Raft leader for the hashed
                   SSTables    SSTables    SSTables
 ```
 
-SQL, transactions, Raft, sharding, and Kubernetes layer **on top of** a correct storage engine. They do not replace it.
+SQL, transactions, Raft, sharding, Kubernetes, and analytics layer **on top of** a correct storage engine. They do not replace it.
 
 ## Process model (Phase 2)
 

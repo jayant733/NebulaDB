@@ -80,4 +80,9 @@ Client `Get`/`Set`/`Delete` and admin fault commands share one `net/rpc` server 
 
 **Status:** Accepted (Phase 11)
 
-`/metrics` is exposition-only. A small in-tree registry avoids a new module and keeps tests free of global Prometheus default-register races. Grafana imports `deploy/grafana/nebuladb.json`.
+## ADR-013: HTTP probes share the metrics listener
+
+**Status:** Accepted (Phase 13)
+
+ADR-006 still forbids HTTP for Raft and client KV. Kubernetes liveness/readiness need an HTTP path. `/livez` and `/readyz` share `--http` (alias `--metrics`) with `/metrics`. `--serve` is process-local wait-for-SIGTERM, not a REST API.
+

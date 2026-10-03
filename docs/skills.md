@@ -18,6 +18,7 @@ This project is a **from-scratch Go database**, not a Tableau or Snowflake wrapp
 | Generative AI concepts | Rule-based NL → supported SQL (`analytics/nl_sql.py`); not a trained model | Phase 12 |
 | Analytics domain | Retail-style star: `dim_customer`, `fact_order` | Phase 12 |
 | Communication | `docs/skills.md` + `analytics/README.md` explain the pipeline | Phase 12 |
+| Kubernetes | StatefulSet + PVC + probes; not a live GKE operator | Phase 13 |
 
 ## What we will not write on a resume until it exists
 

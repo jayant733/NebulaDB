@@ -171,15 +171,37 @@ func Handler(r *Registry) http.Handler {
 	})
 }
 
+// Mux serves /metrics, /livez, and /readyz. ready nil means always ready.
+func Mux(r *Registry, ready *atomic.Bool) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", Handler(r))
+	mux.HandleFunc("/livez", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "ok\n")
+	})
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+		if ready != nil && !ready.Load() {
+			http.Error(w, "not ready\n", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "ok\n")
+	})
+	return mux
+}
+
 // Listen serves /metrics on addr. Returns the listener.
 func Listen(addr string, r *Registry) (net.Listener, error) {
+	return ListenProbes(addr, r, nil)
+}
+
+// ListenProbes serves /metrics, /livez, and /readyz.
+func ListenProbes(addr string, r *Registry, ready *atomic.Bool) (net.Listener, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", Handler(r))
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: Mux(r, ready)}
 	go func() { _ = srv.Serve(ln) }()
 	return ln, nil
 }

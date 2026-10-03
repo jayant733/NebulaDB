@@ -78,6 +78,10 @@ A 3-node group still commits after one follower is isolated. A leader cut off in
 
 `GET /metrics` exposes counters and latency histograms. QPS is derived in Grafana as `rate(nebuladb_ops_total[1m])`, not a number published in the README.
 
+## Phase 13 (Kubernetes, as implemented)
+
+`/livez` and `/readyz` share `--http`. SIGTERM sets not-ready and `Engine.Close` (WAL fsync). A StatefulSet PVC keeps `/data` across pod replacement. Manifests are not a live-cluster proof.
+
 ## What we will not claim until tested
 
 - "CP in CAP" without partition tests

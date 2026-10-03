@@ -95,13 +95,15 @@ Client KV RPC with forward-to-leader, timeouts, retries, and inflight backpressu
 
 Inner join, `GROUP BY` aggregates, Python gather/clean/load, CSV export. Side layer: Spark-shaped job, Databricks notebook source, Snowflake `COPY INTO` template, scheduled `pipeline.py`, Power BI/Tableau stubs + HTML chart. See [docs/skills.md](skills.md) and [docs/phases/phase-12-analytics.md](phases/phase-12-analytics.md).
 
-## Phase 13 — Kubernetes
+## Phase 13 — Kubernetes (done)
 
-StatefulSet, PVCs, headless Service, probes. Rolling restart must not lose committed data.
+StatefulSet, PVC, headless Service, `/livez` `/readyz`, `--serve` + SIGTERM Close. See [docs/phases/phase-13-k8s.md](phases/phase-13-k8s.md) and [deploy/k8s](../deploy/k8s).
 
-## Phase 14 — Benchmarks + docs
+## Phase 14 — Benchmarks + docs (done)
 
-Publish **measured** numbers only. `docs/benchmarks.md` with hardware, commit SHA, and method.
+Measured numbers only: [docs/benchmarks.md](benchmarks.md). Tool: `go run ./cmd/bench`.
+
+The planned flagship phases (storage through deploy + measured bench) are implemented. Out of scope remains: window SQL, CTEs, triggers, catalog views, Helm operator, live kind CI.
 
 ---
 
